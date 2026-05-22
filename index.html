@@ -1,132 +1,148 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="お金カウンター">
-  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)">
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <title>お金カウンター</title>
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
+:root {
+    --primary-color: #007aff;
+    --bg-color: #f2f2f7;
+    --card-bg: #ffffff;
+    --text-color: #1c1c1e;
+    --border-color: #e5e5ea;
+    --error-color: #ff3b30;
+    --success-color: #34c759;
+}
 
-<!-- ▼ ヘッダー -->
-<header class="header">
-  <h1>💴 お金カウンター</h1>
-</header>
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    margin: 0;
+    padding: 16px;
+    display: flex;
+    justify-content: center;
+}
 
-<!-- ▼ メインコンテンツ -->
-<div class="main">
+.app-container {
+    width: 100%;
+    max-width: 500px;
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    box-sizing: border-box;
+}
 
-  <!-- 帳簿残額（ピッカートリガー） -->
-  <div class="ledger-area">
-    <div class="ledger-label">帳簿上の残額（タップして入力）</div>
-    <div class="ledger-trigger" id="ledgerTrigger" role="button" aria-label="帳簿残額を入力">
-      <span class="ledger-yen">¥</span>
-      <span class="ledger-value" id="ledgerValueDisplay">0</span>
-      <span class="ledger-chevron">›</span>
-    </div>
-  </div>
+h1 {
+    font-size: 20px;
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 20px;
+}
 
-  <!-- 2列グリッド：紙幣 ／ 硬貨 -->
-  <div class="columns">
-    <div class="column-card">
-      <div class="column-header">紙 幣</div>
-      <div id="billRows"></div>
-    </div>
-    <div class="column-card">
-      <div class="column-header">硬 貨</div>
-      <div id="coinRows"></div>
-    </div>
-  </div>
+.balance-section {
+    background: var(--bg-color);
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
 
-  <!-- サマリー -->
-  <div class="summary">
-    <div class="summary-row">
-      <span class="summary-label">カウント合計</span>
-      <span class="summary-value" id="totalDisplay">¥0</span>
-    </div>
-    <div class="summary-row">
-      <span class="summary-label">帳簿上の残額</span>
-      <span class="summary-value" id="ledgerDisplay">¥0</span>
-    </div>
-    <div class="summary-row diff-row">
-      <div>
-        <div class="diff-label">差 異</div>
-        <div class="diff-value zero" id="diffDisplay">±0円</div>
-      </div>
-    </div>
-  </div>
+.balance-section label {
+    display: block;
+    font-size: 14px;
+    margin-bottom: 6px;
+    font-weight: bold;
+}
 
-</div><!-- /.main -->
+#book-balance {
+    width: 100%;
+    padding: 12px;
+    font-size: 24px;
+    text-align: right;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-sizing: border-box;
+    background: white;
+    font-weight: bold;
+}
 
-<!-- ▼ リセットボタン -->
-<div class="reset-area">
-  <button class="reset-btn" id="resetBtn">すべてリセット</button>
-</div>
+/* テンキーのレイアウト設定 */
+.keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 12px;
+}
 
+.keypad button {
+    background: white;
+    border: 1px solid var(--border-color);
+    padding: 14px;
+    font-size: 18px;
+    font-weight: bold;
+    border-radius: 6px;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
 
-<!-- ============================================================
-     ドラムロールピッカー
-     ============================================================ -->
-<div class="picker-overlay" id="pickerOverlay"></div>
+.keypad button:active {
+    background: #e5e5ea;
+}
 
-<div class="picker-sheet" id="pickerSheet" role="dialog" aria-label="帳簿残額を入力">
+.keypad .btn-clear {
+    background: var(--error-color);
+    color: white;
+    border: none;
+}
 
-  <!-- ドラッグハンドル -->
-  <div class="picker-handle" id="pickerHandle"></div>
+.keypad .btn-clear:active {
+    background: #cc2e25;
+}
 
-  <!-- ツールバー -->
-  <div class="picker-toolbar">
-    <button class="picker-btn-cancel" id="pickerCancel">キャンセル</button>
-    <span class="picker-toolbar-title">帳簿残額</span>
-    <button class="picker-btn-done"   id="pickerDone">決 定</button>
-  </div>
+.denom-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-color);
+}
 
-  <!-- ピッカー本体（JS で生成） -->
-  <div class="picker-body" id="pickerBody">
-    <!-- picker-highlight は buildPicker() で挿入 -->
-  </div>
+.denom-label {
+    font-size: 16px;
+    font-weight: 500;
+    width: 100px;
+}
 
-  <!-- プレビュー -->
-  <div class="picker-preview" id="pickerPreview">¥ 0</div>
+.denom-picker {
+    font-size: 18px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-color);
+    width: 90px;
+    text-align: center;
+}
 
-</div>
+.denom-subtotal {
+    font-size: 16px;
+    width: 100px;
+    text-align: right;
+}
 
+.result-section {
+    margin-top: 20px;
+    background: var(--bg-color);
+    padding: 16px;
+    border-radius: 8px;
+}
 
-<!-- ============================================================
-     確認モーダル（iOS風）
-     ============================================================ -->
-<div class="confirm-overlay" id="confirmOverlay" role="dialog" aria-modal="true">
-  <div class="confirm-dialog">
-    <div class="confirm-body">
-      <div class="confirm-title"   id="confirmTitle">リセットの確認</div>
-      <div class="confirm-message" id="confirmMessage">すべての枚数と帳簿残額をリセットします。</div>
-    </div>
-    <div class="confirm-actions">
-      <button class="btn-cancel-modal" id="confirmCancel">キャンセル</button>
-      <button class="btn-reset-modal"  id="confirmDoReset">リセット</button>
-    </div>
-  </div>
-</div>
+.result-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 8px;
+}
 
+.result-row:last-child {
+    margin-bottom: 0;
+}
 
-<!-- ▼ JS -->
-<script src="app.js"></script>
-
-<!-- ▼ PWA Service Worker 登録 -->
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js').catch(() => {});
-    });
-  }
-</script>
-
-</body>
-</html>
+.error { color: var(--error-color); }
+.success { color: var(--success-color); }
+.zero { color: var(--text-color); }
