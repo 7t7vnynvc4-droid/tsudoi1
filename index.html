@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="お金カウンター">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)">
+  <title>お金カウンター</title>
+  <style>
+    :root {
+      --bg: #f2f2f7;
+      --card: #ffffff;
+      --card2: #f9f9fb;
+      --label: #1c1c1e;
+      --sublabel: #636366;
+      --border: #e5e5ea;
+      --accent: #007aff;
+      --plus-bg: #007aff;
+      --minus-bg: #e5e5ea;
+      --plus-fg: #ffffff;
+      --minus-fg: #1c1c1e;
+      --total-bg: #f2f2f7;
+      --input-bg: #f2f2f7;
+      --red: #ff3b30;
+      --green: #34c759;
+      --blue: #007aff;
+      --divider: #c6c6c8;
+      --shadow: 0 1px 3px rgba(0,0,0,0.08);
+      --radius: 13px;
+      --row-radius: 10px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1c1c1e;
+        --card: #2c2c2e;
+        --card2: #3a3a3c;
+        --label: #ffffff;
+        --sublabel: #ebebf5cc;
+        --border: #3a3a3c;
+        --accent: #0a84ff;
+        --plus-bg: #0a84ff;
+        --minus-bg: #3a3a3c;
+        --plus-fg: #ffffff;
+        --minus-fg: #ebebf5;
+        --total-bg: #2c2c2e;
+        --input-bg: #3a3a3c;
+        --red: #ff453a;
+        --green: #30d158;
+        --blue: #0a84ff;
+        --divider: #3a3a3c;
+        --shadow: 0 1px 3px rgba(0,0,0,0.3);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--label);
+      font-family: -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif;
+      font-size: 16px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+      overflow-y: auto;
+      overflow-x: hidden;
+      overscroll-behavior: none;
+    }
+
+    /* ヘッダー */
+    .header {
+      background: var(--card);
+      border-bottom: 1px solid var(--divider);
+      padding: 14px 16px 12px;
+      text-align: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .header h1 {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      color: var(--label);
+    }
+
+    /* メインコンテンツ */
+    .main {
+      padding: 12px 12px 6px;
+    }
+
+    /* 2列グリッド */
+    .columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      align-items: start;
+    }
+
+    .column-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .column-header {
+      background: var(--accent);
+      color: #fff;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 7px 0;
+      letter-spacing: 0.5px;
+    }
+
+    /* 各金種行 */
+    .denom-row {
+      padding: 8px 8px;
+      border-bottom: 1px solid var(--divider);
+    }
+
+    .denom-row:last-child {
+      border-bottom: none;
+    }
+
+    .denom-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--label);
+      text-align: center;
+      margin-bottom: 5px;
+      letter-spacing: -0.2px;
+    }
+
+    .denom-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+    }
+
+    /* ＋／－ボタン */
+    .btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      font-weight: 300;
+      line-height: 1;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.1s;
+      flex-shrink: 0;
+    }
+
+    .btn-minus {
+      background: var(--minus-bg);
+      color: var(--minus-fg);
+    }
+
+    .btn-plus {
+      background: var(--plus-bg);
+      color: var(--plus-fg);
+    }
+
+    .btn:active, .btn.pressed {
+      transform: scale(0.88);
+      opacity: 0.75;
+    }
+
+    .btn-minus:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    /* 枚数表示 */
+    .count-display {
+      flex: 1;
+      text-align: center;
+    }
+
+    .count-num {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--label);
+      display: block;
+      line-height: 1;
+    }
+
+    .count-unit {
+      font-size: 11px;
+      color: var(--sublabel);
+      margin-top: 1px;
+    }
+
+    /* サマリーエリア */
+    .summary {
+      margin-top: 10px;
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--divider);
+    }
+
+    .summary-row:last-child {
+      border-bottom: none;
+    }
+
+    .summary-label {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--label);
+    }
+
+    .summary-value {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--label);
+      letter-spacing: -0.5px;
+    }
+
+    /* 差異行 */
+    .diff-row {
+      padding: 12px 16px;
+    }
+
+    .diff-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--sublabel);
+      margin-bottom: 2px;
+    }
+
+    .diff-value {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: -0.8px;
+    }
+
+    .diff-value.positive { color: var(--blue); }
+    .diff-value.negative { color: var(--red); }
+    .diff-value.zero     { color: var(--green); }
+
+    /* 帳簿入力 */
+    .ledger-area {
+      margin-top: 10px;
+      margin-bottom: 12px;
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 12px 16px;
+    }
+
+    .ledger-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--sublabel);
+      margin-bottom: 6px;
+      letter-spacing: 0.2px;
+    }
+
+    .ledger-input-wrap {
+      display: flex;
+      align-items: center;
+      background: var(--input-bg);
+      border-radius: 9px;
+      padding: 0 14px;
+      height: 48px;
+    }
+
+    .ledger-yen {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--sublabel);
+      margin-right: 4px;
+      pointer-events: none;
+    }
+
+    .ledger-input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--label);
+      outline: none;
+      width: 100%;
+      min-width: 0;
+      -webkit-appearance: none;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    .ledger-input::placeholder {
+      color: var(--divider);
+      font-weight: 400;
+    }
+
+    /* リセットボタン */
+    .reset-area {
+      margin: 0 12px 12px;
+    }
+
+    .reset-btn {
+      width: 100%;
+      height: 46px;
+      border: none;
+      border-radius: 11px;
+      background: var(--minus-bg);
+      color: var(--red);
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .reset-btn:active {
+      opacity: 0.6;
+    }
+
+    /* アニメーション */
+    @keyframes bump {
+      0%   { transform: scale(1); }
+      40%  { transform: scale(1.18); }
+      100% { transform: scale(1); }
+    }
+
+    .count-num.animate {
+      animation: bump 0.2s ease-out;
+    }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <h1>💴 お金カウンター</h1>
+</header>
+
+<div class="main">
+
+  <!-- 帳簿入力 -->
+  <div class="ledger-area">
+    <div class="ledger-label">帳簿上の残額</div>
+    <div class="ledger-input-wrap">
+      <span class="ledger-yen">¥</span>
+      <input
+        class="ledger-input"
+        id="ledgerInput"
+        type="number"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        placeholder="0"
+        min="0"
+      >
+    </div>
+  </div>
+
+  <!-- 2列 -->
+  <div class="columns">
+
+    <!-- 左列：紙幣 -->
+    <div class="column-card">
+      <div class="column-header">紙 幣</div>
+      <div id="billRows"></div>
+    </div>
+
+    <!-- 右列：硬貨 -->
+    <div class="column-card">
+      <div class="column-header">硬 貨</div>
+      <div id="coinRows"></div>
+    </div>
+
+  </div>
+
+  <!-- サマリー -->
+  <div class="summary">
+    <div class="summary-row">
+      <span class="summary-label">カウント合計</span>
+      <span class="summary-value" id="totalDisplay">¥0</span>
+    </div>
+    <div class="summary-row">
+      <span class="summary-label">帳簿上の残額</span>
+      <span class="summary-value" id="ledgerDisplay">¥0</span>
+    </div>
+    <div class="summary-row diff-row">
+      <div>
+        <div class="diff-label">差 異</div>
+        <div class="diff-value zero" id="diffDisplay">±0円</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- リセット -->
+<div class="reset-area">
+  <button class="reset-btn" id="resetBtn">すべてリセット</button>
+</div>
+
+<script>
+  // ─── データ定義 ───────────────────────────────────────────
+  const BILLS = [
+    { value: 10000, label: '10,000円' },
+    { value:  5000, label:  '5,000円' },
+    { value:  1000, label:  '1,000円' },
+  ];
+
+  const COINS = [
+    { value: 500, label: '500円' },
+    { value: 100, label: '100円' },
+    { value:  50, label:  '50円' },
+    { value:  10, label:  '10円' },
+    { value:   5, label:   '5円' },
+    { value:   1, label:   '1円' },
+  ];
+
+  const counts = {};
+  [...BILLS, ...COINS].forEach(d => { counts[d.value] = 0; });
+
+  // ─── 行生成 ───────────────────────────────────────────────
+  function buildRows(denominations, containerId) {
+    const container = document.getElementById(containerId);
+    denominations.forEach(d => {
+      const row = document.createElement('div');
+      row.className = 'denom-row';
+
+      row.innerHTML = `
+        <div class="denom-label">${d.label}</div>
+        <div class="denom-controls">
+          <button class="btn btn-minus" data-value="${d.value}" data-delta="-1" disabled>−</button>
+          <div class="count-display">
+            <span class="count-num" id="count-${d.value}">0</span>
+            <div class="count-unit">枚</div>
+          </div>
+          <button class="btn btn-plus" data-value="${d.value}" data-delta="1">＋</button>
+        </div>
+      `;
+      container.appendChild(row);
+    });
+  }
+
+  buildRows(BILLS, 'billRows');
+  buildRows(COINS, 'coinRows');
+
+  // ─── 更新処理 ─────────────────────────────────────────────
+  function updateCount(value, delta) {
+    const newVal = counts[value] + delta;
+    if (newVal < 0) return;
+    counts[value] = newVal;
+
+    const el = document.getElementById(`count-${value}`);
+    el.textContent = newVal;
+
+    // アニメーション
+    el.classList.remove('animate');
+    void el.offsetWidth;
+    el.classList.add('animate');
+
+    // マイナスボタン有効・無効
+    const minusBtn = document.querySelector(`.btn-minus[data-value="${value}"]`);
+    minusBtn.disabled = (newVal === 0);
+
+    recalc();
+  }
+
+  function recalc() {
+    let total = 0;
+    [...BILLS, ...COINS].forEach(d => {
+      total += d.value * counts[d.value];
+    });
+
+    const ledgerRaw = parseInt(document.getElementById('ledgerInput').value, 10);
+    const ledger = isNaN(ledgerRaw) ? 0 : ledgerRaw;
+    const diff = total - ledger;
+
+    document.getElementById('totalDisplay').textContent  = '¥' + total.toLocaleString('ja-JP');
+    document.getElementById('ledgerDisplay').textContent = '¥' + ledger.toLocaleString('ja-JP');
+
+    const diffEl = document.getElementById('diffDisplay');
+    if (diff > 0) {
+      diffEl.textContent = '+' + diff.toLocaleString('ja-JP') + '円';
+      diffEl.className = 'diff-value positive';
+    } else if (diff < 0) {
+      diffEl.textContent = diff.toLocaleString('ja-JP') + '円';
+      diffEl.className = 'diff-value negative';
+    } else {
+      diffEl.textContent = '±0円';
+      diffEl.className = 'diff-value zero';
+    }
+  }
+
+  // ─── 長押し対応 ───────────────────────────────────────────
+  let pressTimer = null;
+  let pressInterval = null;
+  const LONG_PRESS_DELAY = 380;   // ms
+  const REPEAT_INTERVAL  = 110;   // ms（速すぎず遅すぎず）
+
+  function startPress(value, delta, btn) {
+    // 即時1回
+    updateCount(value, delta);
+    btn.classList.add('pressed');
+
+    pressTimer = setTimeout(() => {
+      pressInterval = setInterval(() => {
+        updateCount(value, delta);
+      }, REPEAT_INTERVAL);
+    }, LONG_PRESS_DELAY);
+  }
+
+  function endPress(btn) {
+    if (pressTimer)    { clearTimeout(pressTimer);   pressTimer = null; }
+    if (pressInterval) { clearInterval(pressInterval); pressInterval = null; }
+    if (btn) btn.classList.remove('pressed');
+  }
+
+  // ─── イベント委任 ─────────────────────────────────────────
+  document.addEventListener('pointerdown', e => {
+    const btn = e.target.closest('.btn');
+    if (!btn || btn.disabled) return;
+    e.preventDefault();
+    const value = parseInt(btn.dataset.value, 10);
+    const delta = parseInt(btn.dataset.delta, 10);
+    startPress(value, delta, btn);
+  }, { passive: false });
+
+  document.addEventListener('pointerup',     e => { endPress(e.target.closest('.btn')); });
+  document.addEventListener('pointercancel', e => { endPress(e.target.closest('.btn')); });
+  document.addEventListener('pointerleave',  e => { endPress(e.target.closest('.btn')); });
+
+  // アニメーション終了クリア
+  document.querySelectorAll('.count-num').forEach(el => {
+    el.addEventListener('animationend', () => el.classList.remove('animate'));
+  });
+
+  // ─── 帳簿入力 ────────────────────────────────────────────
+  document.getElementById('ledgerInput').addEventListener('input', recalc);
+
+  // ─── リセット ────────────────────────────────────────────
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    if (!confirm('すべてリセットしますか？')) return;
+    [...BILLS, ...COINS].forEach(d => {
+      counts[d.value] = 0;
+      document.getElementById(`count-${d.value}`).textContent = '0';
+      const minusBtn = document.querySelector(`.btn-minus[data-value="${d.value}"]`);
+      if (minusBtn) minusBtn.disabled = true;
+    });
+    document.getElementById('ledgerInput').value = '';
+    recalc();
+  });
+
+  // ─── テキスト選択禁止（iOS対策）──────────────────────────
+  document.addEventListener('selectstart', e => {
+    if (e.target.closest('.btn')) e.preventDefault();
+  });
+
+  // ─── 初期計算 ────────────────────────────────────────────
+  recalc();
+</script>
+</body>
+</html>
