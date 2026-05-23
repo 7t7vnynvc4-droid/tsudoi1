@@ -555,3 +555,57 @@ function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+/* ▼ ドラムロール改善パッチ */
+DrumCol.prototype._bindEvents = function () {
+  const el = this.colEl;
+
+  el.addEventListener('touchstart', e => {
+    this._onStart(e.touches[0].clientY);
+  }, { passive: true });
+
+  el.addEventListener('touchmove', e => {
+    if (!this._dragging) return;
+
+    requestAnimationFrame(() => {
+      this._onMove(e.touches[0].clientY);
+    });
+  }, { passive: true });
+
+  el.addEventListener('touchend', () => {
+    this._onEnd();
+  }, { passive: true });
+
+  el.addEventListener('touchcancel', () => {
+    this._dragging = false;
+    this.setIndex(this.index, true);
+  }, { passive: true });
+
+  el.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'touch') return;
+
+    e.preventDefault();
+    el.setPointerCapture(e.pointerId);
+    this._onStart(e.clientY);
+  });
+
+  el.addEventListener('pointermove', e => {
+    if (e.pointerType === 'touch') return;
+    if (!this._dragging) return;
+
+    requestAnimationFrame(() => {
+      this._onMove(e.clientY);
+    });
+  });
+
+  el.addEventListener('pointerup', e => {
+    if (e.pointerType === 'touch') return;
+    this._onEnd();
+  });
+
+  el.addEventListener('pointercancel', e => {
+    if (e.pointerType === 'touch') return;
+
+    this._dragging = false;
+    this.setIndex(this.index, true);
+  });
+};
