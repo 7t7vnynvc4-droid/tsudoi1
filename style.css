@@ -1,5 +1,5 @@
 /* =====================================================
-   お金カウンター v2 — style.css
+   お金カウンター v2.2 — style.css
    ===================================================== */
 
 /* ── CSS変数 ─────────────────────────────────────── */
@@ -7,7 +7,6 @@
   --bg:            #f2f2f7;
   --card:          #ffffff;
   --label:         #1c1c1e;
-  --label2:        #3a3a3c;
   --sublabel:      #636366;
   --accent:        #007aff;
   --accent-light:  rgba(0,122,255,0.12);
@@ -16,13 +15,10 @@
   --blue:          #007aff;
   --divider:       rgba(60,60,67,0.18);
   --shadow-sm:     0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md:     0 4px 16px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06);
   --radius-card:   14px;
-  --radius-row:    10px;
 
   /* ピッカー */
   --pk-bg:         #ffffff;
-  --pk-bar-bg:     #f9f9fb;
   --pk-bar-border: rgba(60,60,67,0.18);
   --pk-item:       #1c1c1e;
   --pk-sel-bg:     rgba(0,122,255,0.10);
@@ -40,7 +36,6 @@
     --bg:            #1c1c1e;
     --card:          #2c2c2e;
     --label:         #ffffff;
-    --label2:        #ebebf5;
     --sublabel:      rgba(235,235,245,0.55);
     --accent:        #0a84ff;
     --accent-light:  rgba(10,132,255,0.18);
@@ -49,10 +44,8 @@
     --blue:          #0a84ff;
     --divider:       rgba(84,84,88,0.60);
     --shadow-sm:     0 1px 3px rgba(0,0,0,0.30);
-    --shadow-md:     0 4px 20px rgba(0,0,0,0.45);
 
     --pk-bg:         #2c2c2e;
-    --pk-bar-bg:     #1c1c1e;
     --pk-bar-border: rgba(84,84,88,0.65);
     --pk-item:       #ffffff;
     --pk-sel-bg:     rgba(10,132,255,0.20);
@@ -105,7 +98,7 @@ body {
 /* ── メイン ────────────────────────────────────── */
 .main { padding: 12px 12px 6px; }
 
-/* ── 帳簿エリア ────────────────────────────────── */
+/* ── 帳簿エリア（直接入力） ────────────────────── */
 .ledger-area {
   margin-bottom: 10px;
   background: var(--card);
@@ -117,21 +110,34 @@ body {
   font-size: 12px; font-weight: 600;
   color: var(--sublabel); margin-bottom: 6px; letter-spacing: 0.2px;
 }
-.ledger-trigger {
+.ledger-input-wrap {
   display: flex; align-items: center; gap: 4px;
   background: var(--bg);
   border-radius: 10px; padding: 0 14px; height: 48px;
-  cursor: pointer; transition: opacity .15s;
 }
-.ledger-trigger:active { opacity: .68; }
 .ledger-yen {
   font-size: 19px; font-weight: 600; color: var(--sublabel);
+  flex-shrink: 0;
 }
-.ledger-value {
-  flex: 1; font-size: 22px; font-weight: 700; color: var(--label);
+.ledger-input {
+  flex: 1;
+  background: transparent; border: none; outline: none;
+  font-size: 22px; font-weight: 700; color: var(--label);
   letter-spacing: -0.5px;
+  /* input は user-select: text を有効に */
+  user-select: text; -webkit-user-select: text;
+  /* スピナー非表示 */
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
-.ledger-chevron { font-size: 18px; color: var(--sublabel); }
+.ledger-input::-webkit-inner-spin-button,
+.ledger-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.ledger-input::placeholder { color: var(--divider); }
+/* フォーカス時に枠を青くして編集中を明示 */
+.ledger-input-wrap:has(.ledger-input:focus) {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 
 /* ── 2列グリッド ───────────────────────────────── */
 .columns {
@@ -167,7 +173,6 @@ body {
   text-align: center; margin-bottom: 5px; letter-spacing: -0.1px;
 }
 
-/* タップエリア（枚数表示） */
 .denom-tap {
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
@@ -186,20 +191,15 @@ body {
   font-size: 26px; font-weight: 700; color: var(--label);
   line-height: 1; letter-spacing: -0.5px;
 }
-.denom-unit {
-  font-size: 10px; color: var(--sublabel);
-}
+.denom-unit  { font-size: 10px; color: var(--sublabel); }
 .denom-subtotal {
   font-size: 10px; color: var(--accent);
   font-weight: 600; letter-spacing: -0.2px;
   min-height: 13px;
 }
-
-/* タップヒント */
 .denom-hint {
   text-align: center; margin-top: 4px;
-  font-size: 9px; color: var(--sublabel);
-  opacity: .7;
+  font-size: 9px; color: var(--sublabel); opacity: .7;
 }
 
 /* ── サマリー ──────────────────────────────────── */
@@ -238,7 +238,7 @@ body {
 .reset-btn:active { opacity: .6; }
 
 /* =====================================================
-   ピッカーシート（共通：帳簿 & 枚数）
+   ピッカーシート（枚数のみ）
    ===================================================== */
 .picker-overlay {
   position: fixed; inset: 0;
@@ -247,9 +247,7 @@ body {
   opacity: 0; transition: opacity .26s ease;
   pointer-events: none;
 }
-.picker-overlay.open {
-  opacity: 1; pointer-events: auto;
-}
+.picker-overlay.open { opacity: 1; pointer-events: auto; }
 
 .picker-sheet {
   position: fixed; bottom: 0; left: 0; right: 0;
@@ -285,28 +283,47 @@ body {
 .pk-cancel { color: var(--sublabel); text-align: left; }
 .pk-done   { color: var(--accent); font-weight: 700; text-align: right; }
 
-/* ドラムロール本体
-   高さ 200px = DRUM_H (JS定数と一致させること)
-   選択中心 = 100px (上端から)
-*/
+/* ──────────────────────────────────────────────────
+   ラベル行（.pk-drum-wrap の外・上に配置）
+   ここをドラム本体と分離することで .pk-col の高さ =
+   DRUM_H(200px) に正確に一致し CENTER_Y のズレがなくなる
+   ────────────────────────────────────────────────── */
+.pk-label-row {
+  display: flex;
+  padding: 4px 0 2px;
+}
+.pk-col-label {
+  flex: 1;
+  text-align: center; font-size: 11px; font-weight: 600;
+  color: var(--sublabel); letter-spacing: 0.4px;
+}
+
+/* ──────────────────────────────────────────────────
+   ドラムロール本体
+   DRUM_H = 200px  ← JS 定数と必ず一致させること
+   中心ライン = 100px (上端から)
+   CENTER_Y  = 100 - ITEM_H/2 = 100 - 20 = 80
+   ────────────────────────────────────────────────── */
 .pk-drum-wrap {
   position: relative;
-  height: 200px; overflow: hidden;
-  display: flex; align-items: stretch;
+  height: 200px;        /* = DRUM_H */
+  overflow: hidden;
+  display: flex;
+  align-items: stretch;
 }
 
 /* 選択ハイライト帯
-   top:50% + translateY(-50%) で中心ライン (100px) に配置
-   height = ITEM_H = 40px
-*/
+   top:50% + translateY(-50%) → 上端80px・下端120px・高さ40px
+   = ITEM_H に一致 */
 .pk-selection {
-  position: absolute; left: 0; right: 0;
+  position: absolute; left: 6px; right: 6px;
   top: 50%; transform: translateY(-50%);
-  height: 40px; pointer-events: none; z-index: 2;
+  height: 40px;         /* = ITEM_H */
+  pointer-events: none; z-index: 2;
   background: var(--pk-sel-bg);
-  border-top: 1px solid var(--pk-sel-border);
+  border-top:    1px solid var(--pk-sel-border);
   border-bottom: 1px solid var(--pk-sel-border);
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
 /* 上下フェード */
@@ -319,54 +336,38 @@ body {
 .pk-drum-wrap::after  { bottom: 0; background: var(--pk-fade-btm); }
 
 /* 列コンテナ
-   touch-action: none     → ブラウザのスクロール介入を遮断
-   overscroll-behavior    → 親要素へのスクロール伝播を防止
-*/
+   height は親 (.pk-drum-wrap) の stretch に任せる → 200px固定
+   touch-action: none でブラウザスクロール介入を完全遮断 */
 .pk-col {
-  flex: 1; overflow: hidden;
-  touch-action: none;          /* ← スクロール競合防止 */
-  overscroll-behavior: contain; /* ← スクロール暴発防止 */
-  cursor: grab;
-  position: relative; z-index: 1;
+  flex: 1;
+  overflow: hidden;
+  touch-action: none;           /* ← スクロール競合防止・必須 */
+  overscroll-behavior: contain; /* ← 親へのスクロール伝播防止 */
+  cursor: grab; position: relative; z-index: 1;
   -webkit-user-select: none; user-select: none;
 }
 .pk-col:active { cursor: grabbing; }
 
 .pk-col-inner {
   will-change: transform;
-  /* GPU合成レイヤーに昇格させてジャンクを防ぐ */
-  transform: translateZ(0);
+  transform: translateZ(0); /* GPU レイヤー昇格 */
 }
 
 /* アイテム高さ = ITEM_H = 40px */
 .pk-item {
-  height: 40px;
+  height: 40px;         /* = ITEM_H */
   display: flex; align-items: center; justify-content: center;
-  font-size: 24px; font-weight: 600; color: var(--pk-item);
-  letter-spacing: -0.4px;
+  font-size: 32px; font-weight: 600; color: var(--pk-item);
+  letter-spacing: -0.5px;
 }
 
-/* 列ラベル */
-.pk-col-label {
-  text-align: center; font-size: 11px; font-weight: 600;
-  color: var(--sublabel); padding: 4px 0 2px; letter-spacing: 0.4px;
-}
-.pk-col-wrap {
-  display: flex; flex-direction: column; flex: 1;
-}
-
-/* プレビュー（枚数ピッカー） */
+/* プレビュー */
 .pk-preview {
-  text-align: center; padding: 8px 16px 10px;
+  text-align: center; padding: 8px 16px 12px;
   border-top: 1px solid var(--pk-bar-border);
   font-size: 16px; font-weight: 700; color: var(--accent);
-  letter-spacing: -0.3px; min-height: 38px;
+  letter-spacing: -0.3px; min-height: 40px;
 }
-
-/* =====================================================
-   帳簿ピッカー専用（5列）
-   ===================================================== */
-#ledgerSheet .pk-item { font-size: 20px; }
 
 /* =====================================================
    iOS風確認モーダル
@@ -400,10 +401,7 @@ body {
   font-size: 17px; cursor: pointer; transition: background .12s;
 }
 .modal-actions button:active { background: var(--bg); }
-.modal-btn-cancel {
-  color: var(--blue);
-  border-right: 1px solid var(--divider);
-}
+.modal-btn-cancel { color: var(--blue); border-right: 1px solid var(--divider); }
 .modal-btn-ok { color: var(--red); font-weight: 700; }
 
 /* =====================================================
@@ -414,6 +412,4 @@ body {
   45%  { transform: scale(1.22); }
   100% { transform: scale(1); }
 }
-.denom-count.bump {
-  animation: countBump .18s ease-out;
-}
+.denom-count.bump { animation: countBump .18s ease-out; }
