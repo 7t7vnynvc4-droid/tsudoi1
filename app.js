@@ -1,14 +1,16 @@
-/* =====================================================
-   お金カウンター v2 — app.js
-   ===================================================== */
+/* ===================================================
+   お金カウンター – app.js
+   =================================================== */
+
 'use strict';
 
-/* ── 金種定義 ──────────────────────────────────── */
+// ── 金種定義 ──────────────────────────────────────────
 const BILLS = [
   { value: 10000, label: '10,000円' },
   { value:  5000, label:  '5,000円' },
   { value:  1000, label:  '1,000円' },
 ];
+
 const COINS = [
   { value: 500, label: '500円' },
   { value: 100, label: '100円' },
@@ -17,543 +19,610 @@ const COINS = [
   { value:   5, label:   '5円' },
   { value:   1, label:   '1円' },
 ];
-const ALL = [...BILLS, ...COINS];
 
-/* ── 状態 ──────────────────────────────────────── */
-const counts = {};
-let   ledger = 0;
-ALL.forEach(d => { counts[d.value] = 0; });
+const ALL_DENOMS = [...BILLS, ...COINS];
 
-/* ── localStorage ──────────────────────────────── */
-const STORE_KEY = 'okane-v2';
-function save() {
-  try {
-    localStorage.setItem(STORE_KEY, JSON.stringify({
-      counts: Object.fromEntries(ALL.map(d => [d.value, counts[d.value]])),
-      ledger,
-    }));
-  } catch(_) {}
-}
-function load() {
-  try {
-    const d = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
-    if (d.counts) ALL.forEach(d2 => {
-      const v = parseInt(d.counts[d2.value], 10);
-      if (!isNaN(v) && v >= 0) counts[d2.value] = v;
-    });
-    if (typeof d.ledger === 'number') ledger = d.ledger;
-  } catch(_) {}
+// ── 状態 ─────────────────────────────────────────────
+const counts   = {};
+let   ledger   = 0;            // 帳簿残額
+
+ALL_DENOMS.forEach(d => { counts[d.value] = 0; });
+
+// ── ローカルストレージ ─────────────────────────────
+const STORAGE_KEY = 'okane-counter-v1';
+
+function saveState() {
+  const data = { counts: {}, ledger };
+  ALL_DENOMS.forEach(d => { data.counts[d.value] = counts[d.value]; });
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(_) {}
 }
 
-/* ── 画面更新 ───────────────────────────────────── */
-function refreshRow(value, bump = false) {
-  const c  = counts[value];
-  const el = document.getElementById(`cnt-${value}`);
-  if (!el) return;
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (data.counts) {
+      ALL_DENOMS.forEach(d => {
+        const v = parseInt(data.counts[d.value], 10);
+        if (!isNaN(v) && v >= 0) counts[d.value] = v;
+      });
+    }
+    if (typeof data.ledger === 'number' && !isNaN(data.ledger)) {
+      ledger = data.ledger;
+    }
+  } catch(_) {}
+}
+
+// ── DOM構築：金種行 ────────────────────────────────
+function buildRows(denominations, containerId) {
+  const container = document.getElementById(containerId);
+  denominations.forEach(d => {
+    const row = document.createElement('div');
+    row.className = 'denom-row';
+    row.innerHTML = `
+      <div class="denom-label">${d.label}</div>
+      <div class="denom-controls">
+        <button class="btn btn-minus" data-value="${d.value}" data-delta="-1" disabled>−</button>
+        <div class="count-display">
+          <span class="count-num" id="count-${d.value}">0</span>
+          <div class="count-unit">枚</div>
+        </div>
+        <button class="btn btn-plus" data-value="${d.value}" data-delta="1">＋</button>
+      </div>
+      <div class="subtotal" id="subtotal-${d.value}"></div>
+    `;
+    container.appendChild(row);
+  });
+}
+
+// ── 表示更新 ──────────────────────────────────────
+function updateCountUI(value, animate = true) {
+  const c   = counts[value];
+  const el  = document.getElementById(`count-${value}`);
+  const sub = document.getElementById(`subtotal-${value}`);
+  const mb  = document.querySelector(`.btn-minus[data-value="${value}"]`);
+
   el.textContent = c;
-  if (bump) {
-    el.classList.remove('bump');
+  mb.disabled    = (c === 0);
+
+  // 小計
+  const subtotalVal = value * c;
+  sub.textContent = c > 0
+    ? `${value.toLocaleString('ja-JP')} × ${c} = ${subtotalVal.toLocaleString('ja-JP')}円`
+    : '';
+
+  if (animate) {
+    el.classList.remove('animate');
     void el.offsetWidth;
-    el.classList.add('bump');
-  }
-  const sub = document.getElementById(`sub-${value}`);
-  if (sub) {
-    sub.textContent = c > 0
-      ? `${value.toLocaleString('ja-JP')}×${c}=¥${(value*c).toLocaleString('ja-JP')}`
-      : '';
+    el.classList.add('animate');
   }
 }
 
 function recalc() {
   let total = 0;
-  ALL.forEach(d => { total += d.value * counts[d.value]; });
+  ALL_DENOMS.forEach(d => { total += d.value * counts[d.value]; });
+
   const diff = total - ledger;
 
   document.getElementById('totalDisplay').textContent  = '¥' + total.toLocaleString('ja-JP');
   document.getElementById('ledgerDisplay').textContent = '¥' + ledger.toLocaleString('ja-JP');
-  document.getElementById('ledgerValue').textContent   = ledger.toLocaleString('ja-JP');
 
-  const el = document.getElementById('diffDisplay');
+  const diffEl = document.getElementById('diffDisplay');
   if (diff > 0) {
-    el.textContent = '+' + diff.toLocaleString('ja-JP') + '円';
-    el.className = 'diff-value positive';
+    diffEl.textContent = '+' + diff.toLocaleString('ja-JP') + '円';
+    diffEl.className = 'diff-value positive';
   } else if (diff < 0) {
-    el.textContent = diff.toLocaleString('ja-JP') + '円';
-    el.className = 'diff-value negative';
+    diffEl.textContent = diff.toLocaleString('ja-JP') + '円';
+    diffEl.className = 'diff-value negative';
   } else {
-    el.textContent = '±0円';
-    el.className = 'diff-value zero';
+    diffEl.textContent = '±0円';
+    diffEl.className = 'diff-value zero';
+  }
+
+  // 帳簿トリガー表示
+  document.getElementById('ledgerValueDisplay').textContent =
+    ledger > 0 ? ledger.toLocaleString('ja-JP') : '0';
+}
+
+function updateCount(value, delta) {
+  const newVal = counts[value] + delta;
+  if (newVal < 0) return;
+  counts[value] = newVal;
+  updateCountUI(value, true);
+  recalc();
+  saveState();
+}
+
+// ── 長押し制御 ────────────────────────────────────
+// 仕様: 短押し→1回だけ / 長押し→最初の1回なしで連続
+const LONG_PRESS_DELAY = 400;    // ms後に連続開始
+const REPEAT_INTERVAL  = 100;    // ms間隔で連続
+const RUNAWAY_MARGIN   = 30;     // px: ボタン境界からこれ以上離れたら停止
+
+let pressState = {
+  active:    false,
+  value:     null,
+  delta:     null,
+  btn:       null,
+  timer:     null,
+  interval:  null,
+  startX:    0,
+  startY:    0,
+  isLong:    false,
+};
+
+function clearPress() {
+  if (pressState.timer)    { clearTimeout(pressState.timer);   pressState.timer    = null; }
+  if (pressState.interval) { clearInterval(pressState.interval); pressState.interval = null; }
+  if (pressState.btn)      { pressState.btn.classList.remove('pressing'); }
+  pressState.active  = false;
+  pressState.isLong  = false;
+  pressState.btn     = null;
+}
+
+function startPress(value, delta, btn, x, y) {
+  clearPress();
+  pressState.active  = true;
+  pressState.value   = value;
+  pressState.delta   = delta;
+  pressState.btn     = btn;
+  pressState.startX  = x;
+  pressState.startY  = y;
+  pressState.isLong  = false;
+  btn.classList.add('pressing');
+
+  // 長押し開始：LONG_PRESS_DELAY後に連続モードへ（最初の1回は短押しで処理）
+  pressState.timer = setTimeout(() => {
+    pressState.isLong = true;
+    pressState.interval = setInterval(() => {
+      if (!pressState.active) { clearPress(); return; }
+      updateCount(pressState.value, pressState.delta);
+    }, REPEAT_INTERVAL);
+  }, LONG_PRESS_DELAY);
+}
+
+function endPress(isShortTap) {
+  if (!pressState.active) return;
+  const wasLong = pressState.isLong;
+  clearPress();
+  // 短押しの場合のみ1回実行
+  if (isShortTap && !wasLong && pressState.value !== null) {
+    // すでにclearPressでbtnをnullにしているのでvalueを先に保存
   }
 }
 
-/* ── DOM構築 ───────────────────────────────────── */
-function buildRows(list, id) {
-  const container = document.getElementById(id);
-  list.forEach(d => {
-    const row = document.createElement('div');
-    row.className = 'denom-row';
-    row.dataset.value = d.value;
-    row.innerHTML = `
-      <div class="denom-label">${d.label}</div>
-      <div class="denom-tap">
-        <span class="denom-count" id="cnt-${d.value}">0</span>
-        <span class="denom-unit">枚</span>
-        <span class="denom-subtotal" id="sub-${d.value}"></span>
-      </div>
-      <div class="denom-hint">タップして枚数を選択</div>
-    `;
-    row.addEventListener('click', () => openCountPicker(d));
-    container.appendChild(row);
-  });
-}
+// ボタン外スライド検知
+document.addEventListener('pointermove', e => {
+  if (!pressState.active || !pressState.btn) return;
+  const rect = pressState.btn.getBoundingClientRect();
+  const outside =
+    e.clientX < rect.left   - RUNAWAY_MARGIN ||
+    e.clientX > rect.right  + RUNAWAY_MARGIN ||
+    e.clientY < rect.top    - RUNAWAY_MARGIN ||
+    e.clientY > rect.bottom + RUNAWAY_MARGIN;
+  if (outside) clearPress();
+}, { passive: true });
 
-/* =====================================================
-   汎用ドラムロール・エンジン
-   ===================================================== */
-const ITEM_H    = 44;   // px / item
-const CENTER_Y  = 88;   // viewport内の選択中心 (220/2 - 44/2)
+// イベント委任
+document.addEventListener('pointerdown', e => {
+  const btn = e.target.closest('.btn');
+  if (!btn || btn.disabled) return;
+  e.preventDefault();
 
-/**
- * DrumCol — 1列のドラムロール
- * @param {HTMLElement} colEl   .pk-col
- * @param {HTMLElement} innerEl .pk-col-inner
- * @param {number}      count   アイテム総数
- */
-class DrumCol {
-  constructor(colEl, innerEl, count) {
-    this.colEl   = colEl;
-    this.innerEl = innerEl;
-    this.count   = count;
-    this.index   = 0;
-    this._offset = 0;   // ドラッグ中の一時オフセット(px)
-    this._dragging  = false;
-    this._startY    = 0;
-    this._lastY     = 0;
-    this._lastT     = 0;
-    this._velocity  = 0;
-    this._onChangeCb = null;
+  const value = parseInt(btn.dataset.value, 10);
+  const delta = parseInt(btn.dataset.delta, 10);
 
-    this._bindEvents();
+  startPress(value, delta, btn, e.clientX, e.clientY);
+}, { passive: false });
+
+document.addEventListener('pointerup', e => {
+  if (!pressState.active) return;
+  const wasLong = pressState.isLong;
+  const value   = pressState.value;
+  const delta   = pressState.delta;
+  clearPress();
+  // 短押しのとき1回だけ実行
+  if (!wasLong && value !== null) {
+    updateCount(value, delta);
   }
+});
 
-  /* インデックスをセット（アニメ有無） */
-  setIndex(idx, animated = false) {
-    this.index   = this._clamp(idx);
-    this._offset = 0;
-    this._applyTransform(animated);
-    this._onChangeCb && this._onChangeCb(this.index);
+document.addEventListener('pointercancel', () => clearPress());
+
+// アニメーション終了
+document.addEventListener('animationend', e => {
+  if (e.target.classList.contains('count-num')) {
+    e.target.classList.remove('animate');
   }
+});
 
-  onChange(cb) { this._onChangeCb = cb; }
+// ── ドラムロールピッカー ───────────────────────────
 
-  /* ── 内部 ── */
-  _clamp(v) { return Math.max(0, Math.min(this.count - 1, Math.round(v))); }
-
-  _y() { return CENTER_Y - this.index * ITEM_H + this._offset; }
-
-  _applyTransform(animated = false) {
-    this.innerEl.style.transition = animated
-      ? 'transform .28s cubic-bezier(.25,.46,.45,.94)'
-      : 'none';
-    this.innerEl.style.transform = `translateY(${this._y()}px)`;
-  }
-
-  _snap(withVelocity = false) {
-    if (withVelocity && Math.abs(this._velocity) > 0.25) {
-      /* 慣性: velocity px/ms → 飛距離 */
-      const fly = this._velocity * 110;
-      this.index = this._clamp(this.index - fly / ITEM_H);
-    } else {
-      this.index = this._clamp(this.index - this._offset / ITEM_H);
-    }
-    this._offset = 0;
-    this._applyTransform(true);
-    this._onChangeCb && this._onChangeCb(this.index);
-  }
-
-  _onStart(y) {
-    this._dragging  = true;
-    this._startY    = y;
-    this._lastY     = y;
-    this._lastT     = Date.now();
-    this._velocity  = 0;
-    this.innerEl.style.transition = 'none';
-  }
-
-  _onMove(y) {
-    if (!this._dragging) return;
-    const now = Date.now();
-    const dt  = Math.max(now - this._lastT, 1);
-    this._velocity = (y - this._lastY) / dt;
-    this._lastY    = y;
-    this._lastT    = now;
-
-    const dy       = y - this._startY;
-    const rawIdx   = this.index - dy / ITEM_H;
-    const maxI     = this.count - 1;
-
-    /* ゴム引き */
-    if (rawIdx < 0) {
-      this._offset = this.index * ITEM_H + dy * 0.32;
-    } else if (rawIdx > maxI) {
-      this._offset = (this.index - maxI) * ITEM_H + (dy - (this.index - maxI) * ITEM_H) * 0.32;
-    } else {
-      this._offset = dy;
-    }
-    this._applyTransform(false);
-  }
-
-  _onEnd() {
-    if (!this._dragging) return;
-    this._dragging = false;
-    this._snap(true);
-  }
-
-  _bindEvents() {
-    const el = this.colEl;
-
-    /* Touch（iOS Safari メイン） */
-    el.addEventListener('touchstart', e => {
-      e.preventDefault();
-      this._onStart(e.touches[0].clientY);
-    }, { passive: false });
-
-    el.addEventListener('touchmove', e => {
-      e.preventDefault();
-      this._onMove(e.touches[0].clientY);
-    }, { passive: false });
-
-    el.addEventListener('touchend', e => {
-      e.preventDefault();
-      this._onEnd();
-    }, { passive: false });
-
-    el.addEventListener('touchcancel', () => {
-      this._dragging = false;
-      this.setIndex(this.index, true);
-    }, { passive: true });
-
-    /* Pointer（デスクトップ確認用） */
-    el.addEventListener('pointerdown', e => {
-      if (e.pointerType === 'touch') return;
-      e.preventDefault();
-      el.setPointerCapture(e.pointerId);
-      this._onStart(e.clientY);
-    });
-    el.addEventListener('pointermove', e => {
-      if (e.pointerType === 'touch') return;
-      this._onMove(e.clientY);
-    });
-    el.addEventListener('pointerup', e => {
-      if (e.pointerType === 'touch') return;
-      this._onEnd();
-    });
-    el.addEventListener('pointercancel', e => {
-      if (e.pointerType === 'touch') return;
-      this._dragging = false;
-      this.setIndex(this.index, true);
-    });
-  }
-}
-
-/* =====================================================
-   ピッカーシート 共通操作
-   ===================================================== */
-function showSheet(overlay, sheet) {
-  overlay.classList.add('open');
-  sheet.classList.add('open');
-}
-function hideSheet(overlay, sheet) {
-  overlay.classList.remove('open');
-  sheet.classList.remove('open');
-  sheet.style.transform = '';  /* transition終了後リセット */
-}
-
-/* シートをドラッグで閉じる */
-function bindSheetDrag(handleEl, sheetEl, onClose) {
-  let startY = 0, dragging = false;
-  handleEl.addEventListener('touchstart', e => {
-    dragging = true;
-    startY = e.touches[0].clientY;
-    sheetEl.style.transition = 'none';
-  }, { passive: true });
-  document.addEventListener('touchmove', e => {
-    if (!dragging) return;
-    const dy = Math.max(0, e.touches[0].clientY - startY);
-    sheetEl.style.transform = `translateY(${dy}px)`;
-  }, { passive: true });
-  document.addEventListener('touchend', e => {
-    if (!dragging) return;
-    dragging = false;
-    sheetEl.style.transition = '';
-    if (e.changedTouches[0].clientY - startY > 80) {
-      onClose();
-    } else {
-      sheetEl.style.transform = '';
-    }
-  }, { passive: true });
-}
-
-/* =====================================================
-   枚数ピッカー（各金種）
-   ===================================================== */
-const COUNT_MAX = 99;
-
-let countPickerDenom  = null;   // 現在開いている金種
-let countPickerDrum   = null;   // DrumCol インスタンス
-let countPickerCancelValue = 0; // キャンセル用退避
-
-function buildCountPicker() {
-  const sheet   = document.getElementById('countSheet');
-  const inner   = document.getElementById('countInner');
-
-  /* アイテム生成 0〜99 */
-  inner.innerHTML = '';
-  for (let i = 0; i <= COUNT_MAX; i++) {
-    const item = document.createElement('div');
-    item.className = 'pk-item';
-    item.textContent = String(i);
-    inner.appendChild(item);
-  }
-
-  const colEl = document.getElementById('countCol');
-  countPickerDrum = new DrumCol(colEl, inner, COUNT_MAX + 1);
-
-  countPickerDrum.onChange(idx => {
-    const preview = document.getElementById('countPreview');
-    if (countPickerDenom) {
-      const sub = idx > 0
-        ? `${countPickerDenom.value.toLocaleString('ja-JP')} × ${idx} = ¥${(countPickerDenom.value * idx).toLocaleString('ja-JP')}`
-        : '0枚';
-      preview.textContent = sub;
-    }
-  });
-
-  /* ドラッグで閉じる */
-  bindSheetDrag(
-    document.getElementById('countHandle'),
-    sheet,
-    () => closeCountPicker(false)
-  );
-}
-
-function openCountPicker(denom) {
-  countPickerDenom       = denom;
-  countPickerCancelValue = counts[denom.value];
-
-  /* タイトル更新 */
-  document.getElementById('countTitle').textContent = denom.label + ' の枚数';
-
-  /* 現在の枚数にセット */
-  countPickerDrum.setIndex(counts[denom.value], false);
-
-  /* プレビュー初期化 */
-  const c = counts[denom.value];
-  document.getElementById('countPreview').textContent = c > 0
-    ? `${denom.value.toLocaleString('ja-JP')} × ${c} = ¥${(denom.value * c).toLocaleString('ja-JP')}`
-    : '0枚';
-
-  showSheet(
-    document.getElementById('countOverlay'),
-    document.getElementById('countSheet')
-  );
-}
-
-function closeCountPicker(apply) {
-  if (apply && countPickerDenom) {
-    counts[countPickerDenom.value] = countPickerDrum.index;
-    refreshRow(countPickerDenom.value, true);
-    recalc();
-    save();
-  }
-  hideSheet(
-    document.getElementById('countOverlay'),
-    document.getElementById('countSheet')
-  );
-  countPickerDenom = null;
-}
-
-/* =====================================================
-   帳簿ピッカー（5列: 万/千/百/十/一）
-   ===================================================== */
-const LEDGER_COLS = [
-  { label: '万', mult: 10000, count: 100 },
-  { label: '千', mult:  1000, count:  10 },
-  { label: '百', mult:   100, count:  10 },
-  { label: '十', mult:    10, count:  10 },
-  { label: '一', mult:     1, count:  10 },
+// 列定義: [ラベル, アイテム数, 最大桁の特例]
+// 万: 0〜99, 千〜一: 0〜9
+const PICKER_COLS = [
+  { label: '万', count: 100, multiplier: 10000 },
+  { label: '千', count:  10, multiplier:  1000 },
+  { label: '百', count:  10, multiplier:   100 },
+  { label: '十', count:  10, multiplier:    10 },
+  { label: '一', count:  10, multiplier:     1 },
 ];
 
-let ledgerDrums = [];
+const ITEM_H  = 44;   // px
+const PADDING = 3;    // 表示パディング（上下の余分アイテム数）
 
-function ledgerToIndices(val) {
+// ピッカーの各列の状態
+const pickerState = PICKER_COLS.map(() => ({
+  index: 0,       // 現在の選択インデックス
+  offset: 0,      // 現在のpx offset (アニメ中)
+  dragging: false,
+  dragStartY: 0,
+  dragStartOffset: 0,
+  velocity: 0,
+  lastY: 0,
+  lastT: 0,
+  rafId: null,
+}));
+
+let pickerOpen = false;
+let pickerTempValue = 0;  // ピッカー操作中の一時値
+
+function ledgerToPickerIndices(val) {
   const indices = [];
-  let rem = Math.max(0, Math.min(val, 999999));
-  LEDGER_COLS.forEach(c => {
-    const d = Math.floor(rem / c.mult);
-    indices.push(d);
-    rem -= d * c.mult;
+  let remaining = Math.max(0, Math.min(val, 999999));
+  PICKER_COLS.forEach(col => {
+    const digit = Math.floor(remaining / col.multiplier);
+    indices.push(digit);
+    remaining -= digit * col.multiplier;
   });
   return indices;
 }
 
-function indicesToLedger(indices) {
-  return LEDGER_COLS.reduce((s, c, i) => s + indices[i] * c.mult, 0);
+function pickerIndicesToValue(indices) {
+  let val = 0;
+  PICKER_COLS.forEach((col, i) => { val += indices[i] * col.multiplier; });
+  return val;
 }
 
-function updateLedgerPreview() {
-  const val = indicesToLedger(ledgerDrums.map(d => d.index));
-  document.getElementById('ledgerPreview').textContent = '¥ ' + val.toLocaleString('ja-JP');
-}
-
-function buildLedgerPicker() {
-  const body = document.getElementById('ledgerBody');
+function buildPicker() {
+  const body = document.getElementById('pickerBody');
   body.innerHTML = '';
 
-  /* 選択ハイライト */
+  // ハイライト
   const hl = document.createElement('div');
-  hl.className = 'pk-selection';
+  hl.className = 'picker-highlight';
   body.appendChild(hl);
 
-  ledgerDrums = [];
+  PICKER_COLS.forEach((col, ci) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'picker-col-wrap';
 
-  LEDGER_COLS.forEach((col, ci) => {
-    const wrap  = document.createElement('div');
-    wrap.className = 'pk-col-wrap';
-
-    const lbl   = document.createElement('div');
-    lbl.className = 'pk-col-label';
-    lbl.textContent = col.label;
+    const label = document.createElement('div');
+    label.className = 'picker-col-label';
+    label.textContent = col.label;
 
     const colEl = document.createElement('div');
-    colEl.className = 'pk-col';
-    colEl.id = `ledger-col-${ci}`;
+    colEl.className = 'picker-col';
+    colEl.id = `picker-col-${ci}`;
 
     const inner = document.createElement('div');
-    inner.className = 'pk-col-inner';
-    inner.id = `ledger-inner-${ci}`;
+    inner.className = 'picker-col-inner';
+    inner.id = `picker-inner-${ci}`;
 
+    // アイテム生成（上下PADDING分の余裕）
     for (let i = 0; i < col.count; i++) {
       const item = document.createElement('div');
-      item.className = 'pk-item';
-      item.textContent = String(i);
+      item.className = 'picker-item';
+      item.textContent = ci === 0 ? String(i) : String(i);
       inner.appendChild(item);
     }
 
     colEl.appendChild(inner);
-    wrap.appendChild(lbl);
+    wrap.appendChild(label);
     wrap.appendChild(colEl);
     body.appendChild(wrap);
 
-    const drum = new DrumCol(colEl, inner, col.count);
-    drum.onChange(() => updateLedgerPreview());
-    ledgerDrums.push(drum);
+    setupPickerColEvents(ci, colEl, inner, col.count);
+  });
+}
+
+function getPickerOffset(ci) {
+  // offset = -(index * ITEM_H) + center
+  // center = bodyHeight/2 - ITEM_H/2 = 110 - 22 = 88
+  const CENTER_OFFSET = 88;
+  return CENTER_OFFSET - pickerState[ci].index * ITEM_H + pickerState[ci].offset;
+}
+
+function applyPickerTransform(ci, inner, animated = false) {
+  const y = getPickerOffset(ci);
+  inner.style.transition = animated ? 'transform 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94)' : 'none';
+  inner.style.transform  = `translateY(${y}px)`;
+}
+
+function clampIndex(ci, idx) {
+  return Math.max(0, Math.min(PICKER_COLS[ci].count - 1, Math.round(idx)));
+}
+
+function snapPickerCol(ci) {
+  const inner = document.getElementById(`picker-inner-${ci}`);
+  if (!inner) return;
+  pickerState[ci].index  = clampIndex(ci, pickerState[ci].index + pickerState[ci].offset / -ITEM_H);
+  pickerState[ci].offset = 0;
+  applyPickerTransform(ci, inner, true);
+  updatePickerPreview();
+}
+
+function flingPickerCol(ci, velocity) {
+  const inner = document.getElementById(`picker-inner-${ci}`);
+  if (!inner) return;
+
+  const state = pickerState[ci];
+  const maxI  = PICKER_COLS[ci].count - 1;
+
+  // velocity: px/ms → 慣性でどれだけ飛ぶか
+  const flyDistance = velocity * 120;  // 減衰係数
+  const rawNewIndex = state.index - flyDistance / ITEM_H;
+  const newIndex    = Math.max(0, Math.min(maxI, Math.round(rawNewIndex)));
+
+  state.index  = newIndex;
+  state.offset = 0;
+  applyPickerTransform(ci, inner, true);
+  updatePickerPreview();
+}
+
+function setPickerIndex(ci, idx, animated = false) {
+  const inner = document.getElementById(`picker-inner-${ci}`);
+  if (!inner) return;
+  pickerState[ci].index  = clampIndex(ci, idx);
+  pickerState[ci].offset = 0;
+  applyPickerTransform(ci, inner, animated);
+}
+
+function setupPickerColEvents(ci, colEl, inner, count) {
+  const state = pickerState[ci];
+
+  function onDragStart(y) {
+    state.dragging        = true;
+    state.dragStartY      = y;
+    state.dragStartOffset = state.offset;
+    state.lastY           = y;
+    state.lastT           = Date.now();
+    state.velocity        = 0;
+    inner.style.transition = 'none';
+  }
+
+  function onDragMove(y) {
+    if (!state.dragging) return;
+    const dy  = y - state.dragStartY;
+    const now = Date.now();
+    const dt  = Math.max(now - state.lastT, 1);
+    state.velocity = (y - state.lastY) / dt;
+    state.lastY    = y;
+    state.lastT    = now;
+
+    // ゴム引きクランプ
+    const maxI     = count - 1;
+    const rawIndex = state.index - dy / ITEM_H;
+    if (rawIndex < 0) {
+      // 先頭を超えようとしている：ゴム引き
+      state.offset = state.index * ITEM_H + dy * 0.35;
+    } else if (rawIndex > maxI) {
+      // 末尾を超えようとしている：ゴム引き
+      const overDy = dy - (state.index - maxI) * ITEM_H;
+      state.offset = (state.index - maxI) * ITEM_H + overDy * 0.35;
+    } else {
+      state.offset = dy;
+    }
+    applyPickerTransform(ci, inner, false);
+  }
+
+  function onDragEnd() {
+    if (!state.dragging) return;
+    state.dragging = false;
+    // 慣性フリック or スナップ
+    if (Math.abs(state.velocity) > 0.25) {
+      flingPickerCol(ci, state.velocity);
+    } else {
+      state.index  = clampIndex(ci, state.index - state.offset / ITEM_H);
+      state.offset = 0;
+      applyPickerTransform(ci, inner, true);
+      updatePickerPreview();
+    }
+  }
+
+  // Touch events（Safari iOS）
+  colEl.addEventListener('touchstart', e => {
+    e.preventDefault();
+    onDragStart(e.touches[0].clientY);
+  }, { passive: false });
+
+  colEl.addEventListener('touchmove', e => {
+    e.preventDefault();
+    onDragMove(e.touches[0].clientY);
+  }, { passive: false });
+
+  colEl.addEventListener('touchend', e => {
+    e.preventDefault();
+    onDragEnd();
+  }, { passive: false });
+
+  // Pointer events（デスクトップ・テスト用）
+  colEl.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'touch') return; // touchに任せる
+    e.preventDefault();
+    colEl.setPointerCapture(e.pointerId);
+    onDragStart(e.clientY);
   });
 
-  bindSheetDrag(
-    document.getElementById('ledgerHandle'),
-    document.getElementById('ledgerSheet'),
-    () => closeLedgerPicker(false)
-  );
+  colEl.addEventListener('pointermove', e => {
+    if (e.pointerType === 'touch') return;
+    onDragMove(e.clientY);
+  });
+
+  colEl.addEventListener('pointerup', e => {
+    if (e.pointerType === 'touch') return;
+    onDragEnd();
+  });
+
+  colEl.addEventListener('pointercancel', e => {
+    if (e.pointerType === 'touch') return;
+    state.dragging = false;
+    snapPickerCol(ci);
+  });
 }
 
-function openLedgerPicker() {
-  const indices = ledgerToIndices(ledger);
-  ledgerDrums.forEach((drum, i) => drum.setIndex(indices[i], false));
-  updateLedgerPreview();
-  showSheet(
-    document.getElementById('ledgerOverlay'),
-    document.getElementById('ledgerSheet')
-  );
+function updatePickerPreview() {
+  const indices = pickerState.map(s => s.index);
+  const val = pickerIndicesToValue(indices);
+  const el  = document.getElementById('pickerPreview');
+  if (el) el.textContent = '¥ ' + val.toLocaleString('ja-JP');
 }
 
-function closeLedgerPicker(apply) {
+function openPicker() {
+  if (pickerOpen) return;
+  pickerOpen = true;
+
+  // 現在の帳簿残額をピッカーに反映
+  const indices = ledgerToPickerIndices(ledger);
+  PICKER_COLS.forEach((_, ci) => {
+    setPickerIndex(ci, indices[ci], false);
+    // 即座にtransformを更新
+    const inner = document.getElementById(`picker-inner-${ci}`);
+    if (inner) applyPickerTransform(ci, inner, false);
+  });
+  updatePickerPreview();
+
+  document.getElementById('pickerOverlay').classList.add('visible');
+  document.getElementById('pickerSheet').classList.add('visible');
+}
+
+function closePicker(apply) {
+  if (!pickerOpen) return;
+  pickerOpen = false;
+
   if (apply) {
-    ledger = indicesToLedger(ledgerDrums.map(d => d.index));
+    const indices = pickerState.map(s => s.index);
+    ledger = pickerIndicesToValue(indices);
     recalc();
-    save();
+    saveState();
   }
-  hideSheet(
-    document.getElementById('ledgerOverlay'),
-    document.getElementById('ledgerSheet')
-  );
+
+  document.getElementById('pickerOverlay').classList.remove('visible');
+  document.getElementById('pickerSheet').classList.remove('visible');
 }
 
-/* =====================================================
-   確認モーダル
-   ===================================================== */
-function showConfirm(title, msg, onOk) {
-  document.getElementById('modalTitle').textContent = title;
-  document.getElementById('modalMsg').textContent   = msg;
-  const overlay = document.getElementById('confirmOverlay');
-  overlay.classList.add('open');
+// シートのドラッグで閉じる
+function setupSheetDrag() {
+  const sheet = document.getElementById('pickerSheet');
+  let startY = 0, startTranslate = 0, isDragging = false;
 
-  const btnOk     = document.getElementById('modalOk');
-  const btnCancel = document.getElementById('modalCancel');
+  function getTranslate() {
+    const t = sheet.style.transform;
+    if (!t || t === 'translateY(0%)' || t === 'translateY(0px)') return 0;
+    const m = t.match(/translateY\((.+?)px\)/);
+    return m ? parseFloat(m[1]) : 0;
+  }
+
+  const handle = document.getElementById('pickerHandle');
+
+  handle.addEventListener('touchstart', e => {
+    isDragging    = true;
+    startY        = e.touches[0].clientY;
+    startTranslate = 0;
+    sheet.style.transition = 'none';
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (!isDragging) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy > 0) {
+      sheet.style.transform = `translateY(${dy}px)`;
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', e => {
+    if (!isDragging) return;
+    isDragging = false;
+    const dy = e.changedTouches[0].clientY - startY;
+    sheet.style.transition = '';
+    if (dy > 80) {
+      closePicker(false);
+    } else {
+      sheet.style.transform = 'translateY(0)';
+    }
+  }, { passive: true });
+}
+
+// ── 確認モーダル ──────────────────────────────────
+function showConfirm(title, message, onOk) {
+  document.getElementById('confirmTitle').textContent   = title;
+  document.getElementById('confirmMessage').textContent = message;
+  document.getElementById('confirmOverlay').classList.add('visible');
+
+  const doReset = document.getElementById('confirmDoReset');
+  const cancel  = document.getElementById('confirmCancel');
 
   function cleanup() {
-    overlay.classList.remove('open');
-    btnOk.removeEventListener('click', doOk);
-    btnCancel.removeEventListener('click', doCancel);
+    document.getElementById('confirmOverlay').classList.remove('visible');
+    doReset.removeEventListener('click', onConfirm);
+    cancel.removeEventListener('click', onCancel);
   }
-  function doOk()     { cleanup(); onOk(); }
-  function doCancel() { cleanup(); }
 
-  btnOk.addEventListener('click', doOk);
-  btnCancel.addEventListener('click', doCancel);
+  function onConfirm() { cleanup(); onOk(); }
+  function onCancel()  { cleanup(); }
+
+  doReset.addEventListener('click', onConfirm);
+  cancel.addEventListener('click',  onCancel);
 }
 
-/* =====================================================
-   リセット
-   ===================================================== */
+// ── リセット処理 ──────────────────────────────────
 function doReset() {
-  ALL.forEach(d => {
+  ALL_DENOMS.forEach(d => {
     counts[d.value] = 0;
-    refreshRow(d.value, false);
+    updateCountUI(d.value, false);
   });
   ledger = 0;
   recalc();
-  save();
+  saveState();
 }
 
-/* =====================================================
-   初期化
-   ===================================================== */
+// ── 初期化 ────────────────────────────────────────
 function init() {
-  load();
+  loadState();
+
   buildRows(BILLS, 'billRows');
   buildRows(COINS, 'coinRows');
-  buildCountPicker();
-  buildLedgerPicker();
+  buildPicker();
+  setupSheetDrag();
 
-  /* 保存値を反映 */
-  ALL.forEach(d => refreshRow(d.value, false));
+  // 保存データを表示に反映
+  ALL_DENOMS.forEach(d => updateCountUI(d.value, false));
   recalc();
 
-  /* 帳簿トリガー */
-  document.getElementById('ledgerTrigger').addEventListener('click', openLedgerPicker);
+  // 帳簿入力トリガー
+  document.getElementById('ledgerTrigger').addEventListener('click', openPicker);
 
-  /* 帳簿ピッカーボタン */
-  document.getElementById('ledgerCancel').addEventListener('click', () => closeLedgerPicker(false));
-  document.getElementById('ledgerDone').addEventListener('click',   () => closeLedgerPicker(true));
-  document.getElementById('ledgerOverlay').addEventListener('click', () => closeLedgerPicker(false));
+  // ピッカーボタン
+  document.getElementById('pickerCancel').addEventListener('click', () => closePicker(false));
+  document.getElementById('pickerDone').addEventListener('click',   () => closePicker(true));
 
-  /* 枚数ピッカーボタン */
-  document.getElementById('countCancel').addEventListener('click', () => closeCountPicker(false));
-  document.getElementById('countDone').addEventListener('click',   () => closeCountPicker(true));
-  document.getElementById('countOverlay').addEventListener('click', () => closeCountPicker(false));
+  // オーバーレイタップで閉じる
+  document.getElementById('pickerOverlay').addEventListener('click', () => closePicker(false));
 
-  /* リセット */
+  // リセットボタン
   document.getElementById('resetBtn').addEventListener('click', () => {
-    showConfirm('リセットの確認', 'すべての枚数と帳簿残額をリセットします。', doReset);
+    showConfirm(
+      'リセットの確認',
+      'すべての枚数と帳簿残額をリセットします。',
+      doReset
+    );
   });
 
-  /* テキスト選択禁止 */
+  // テキスト選択禁止
   document.addEventListener('selectstart', e => {
-    if (!e.target.closest('input')) e.preventDefault();
+    if (e.target.closest('.btn')) e.preventDefault();
   });
 }
 
 document.addEventListener('DOMContentLoaded', init);
-/* ▼ ドラムロール改善版 */
-DrumCol.prototype._bindEvents = function () {
