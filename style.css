@@ -396,3 +396,15 @@ body {
 .denom-count.bump {
   animation: countBump .18s ease-out;
 }
+/* ▼ ドラムロール改善 */
+.pk-col {
+  overflow-y: scroll !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain;
+  touch-action: pan-y !important;
+}
+
+.pk-col-inner {
+  will-change: auto !important;
+  transform: translateZ(0);
+}
