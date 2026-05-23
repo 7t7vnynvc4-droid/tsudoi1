@@ -1,5 +1,12 @@
 /* =====================================================
-   お金カウンター v2 — app.js
+   お金カウンター v2.1 — app.js
+   改善内容:
+   - DrumCol を rAF ベースで完全書き直し
+   - ITEM_H=40、CENTER_Y を動的計算（pk-drum-wrap 実高さ基準）
+   - touchstart/touchmove/touchend に正しく preventDefault
+   - スナップ位置を Math.round で整数保証
+   - ゴム引き改善・慣性フリック精度向上
+   - touchcancel / pointercancel を確実に処理
    ===================================================== */
 'use strict';
 
@@ -108,151 +115,268 @@ function buildRows(list, id) {
 }
 
 /* =====================================================
-   汎用ドラムロール・エンジン
+   定数
    ===================================================== */
-const ITEM_H    = 44;   // px / item
-const CENTER_Y  = 88;   // viewport内の選択中心 (220/2 - 44/2)
+const ITEM_H = 40;    // アイテム高さ (px) — 40px に縮小
 
-/**
- * DrumCol — 1列のドラムロール
- * @param {HTMLElement} colEl   .pk-col
- * @param {HTMLElement} innerEl .pk-col-inner
- * @param {number}      count   アイテム総数
- */
+/*
+  CENTER_Y の考え方:
+  ─────────────────────────────────────────────
+  .pk-drum-wrap の高さ = 200px (CSS で設定)
+  選択中心ライン = 200/2 = 100px (上端からの距離)
+
+  innerEl の translateY(y) で「index番目アイテムの中心」が
+  中心ラインに来る条件:
+    y + index * ITEM_H + ITEM_H/2 = 100
+  → y = 100 - ITEM_H/2 - index * ITEM_H
+  → index=0 のとき y = 100 - 20 = 80
+
+  CENTER_Y = 80  (= pk-drum-wrap_height/2 - ITEM_H/2)
+  ─────────────────────────────────────────────
+  ※ ラベル行(.pk-col-label)は .pk-col-wrap の外なので
+     .pk-col の高さには影響しない（CSS flex-column で分離）
+*/
+const DRUM_H   = 200;  // .pk-drum-wrap の高さ (CSS と一致させる)
+const CENTER_Y = DRUM_H / 2 - ITEM_H / 2;  // = 80
+
+/* =====================================================
+   DrumCol — 1列のドラムロール (rAF 版)
+   ===================================================== */
 class DrumCol {
   constructor(colEl, innerEl, count) {
-    this.colEl   = colEl;
-    this.innerEl = innerEl;
-    this.count   = count;
-    this.index   = 0;
-    this._offset = 0;   // ドラッグ中の一時オフセット(px)
+    this.colEl    = colEl;
+    this.innerEl  = innerEl;
+    this.count    = count;
+
+    /* 選択インデックス（常に整数） */
+    this.index    = 0;
+
+    /* ドラッグ中の生オフセット(px)。スナップ後は 0 にリセット */
+    this._rawOffset = 0;
+
+    /* rAF 管理 */
+    this._rafId   = null;
+    this._pendingY = null;  // rAF に渡す最新の translateY 値
+
+    /* ドラッグ状態 */
     this._dragging  = false;
     this._startY    = 0;
     this._lastY     = 0;
     this._lastT     = 0;
-    this._velocity  = 0;
+    this._velocity  = 0;   // px/ms
+
+    /* コールバック */
     this._onChangeCb = null;
+
+    /* 初期位置を即座に適用 */
+    this.innerEl.style.transform = `translateY(${CENTER_Y}px)`;
 
     this._bindEvents();
   }
 
-  /* インデックスをセット（アニメ有無） */
+  /* ── 公開 API ── */
   setIndex(idx, animated = false) {
-    this.index   = this._clamp(idx);
-    this._offset = 0;
-    this._applyTransform(animated);
+    this._cancelRaf();
+    this._rawOffset = 0;
+    this.index      = this._clamp(idx);
+    const y         = this._calcY(this.index, 0);
+
+    if (animated) {
+      this._setTransition(true);
+      this.innerEl.style.transform = `translateY(${y}px)`;
+    } else {
+      this._setTransition(false);
+      this.innerEl.style.transform = `translateY(${y}px)`;
+    }
     this._onChangeCb && this._onChangeCb(this.index);
   }
 
   onChange(cb) { this._onChangeCb = cb; }
 
-  /* ── 内部 ── */
-  _clamp(v) { return Math.max(0, Math.min(this.count - 1, Math.round(v))); }
+  /* ── 内部ユーティリティ ── */
 
-  _y() { return CENTER_Y - this.index * ITEM_H + this._offset; }
+  /** index と offset から translateY を計算 */
+  _calcY(index, offset) {
+    return CENTER_Y - index * ITEM_H + offset;
+  }
 
-  _applyTransform(animated = false) {
-    this.innerEl.style.transition = animated
-      ? 'transform .28s cubic-bezier(.25,.46,.45,.94)'
+  _clamp(v) {
+    return Math.max(0, Math.min(this.count - 1, Math.round(v)));
+  }
+
+  _setTransition(on) {
+    this.innerEl.style.transition = on
+      ? 'transform 0.26s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
       : 'none';
-    this.innerEl.style.transform = `translateY(${this._y()}px)`;
   }
 
-  _snap(withVelocity = false) {
-    if (withVelocity && Math.abs(this._velocity) > 0.25) {
-      /* 慣性: velocity px/ms → 飛距離 */
-      const fly = this._velocity * 110;
-      this.index = this._clamp(this.index - fly / ITEM_H);
-    } else {
-      this.index = this._clamp(this.index - this._offset / ITEM_H);
+  /* rAF をキャンセル */
+  _cancelRaf() {
+    if (this._rafId !== null) {
+      cancelAnimationFrame(this._rafId);
+      this._rafId = null;
     }
-    this._offset = 0;
-    this._applyTransform(true);
-    this._onChangeCb && this._onChangeCb(this.index);
+    this._pendingY = null;
   }
 
-  _onStart(y) {
-    this._dragging  = true;
-    this._startY    = y;
-    this._lastY     = y;
-    this._lastT     = Date.now();
-    this._velocity  = 0;
-    this.innerEl.style.transition = 'none';
+  /* rAF ループ: _pendingY を実際の style に反映 */
+  _scheduleRaf(y) {
+    this._pendingY = y;
+    if (this._rafId !== null) return; // すでにスケジュール済み
+    this._rafId = requestAnimationFrame(() => {
+      this._rafId = null;
+      if (this._pendingY === null) return;
+      this.innerEl.style.transform = `translateY(${this._pendingY}px)`;
+      this._pendingY = null;
+    });
   }
 
-  _onMove(y) {
+  /* ── ドラッグ処理 ── */
+  _onStart(clientY) {
+    this._cancelRaf();
+    this._setTransition(false);
+
+    this._dragging   = true;
+    this._startY     = clientY;
+    this._lastY      = clientY;
+    this._lastT      = performance.now();
+    this._velocity   = 0;
+    this._rawOffset  = 0;
+  }
+
+  _onMove(clientY) {
     if (!this._dragging) return;
-    const now = Date.now();
-    const dt  = Math.max(now - this._lastT, 1);
-    this._velocity = (y - this._lastY) / dt;
-    this._lastY    = y;
-    this._lastT    = now;
 
-    const dy       = y - this._startY;
-    const rawIdx   = this.index - dy / ITEM_H;
-    const maxI     = this.count - 1;
+    const now  = performance.now();
+    const dt   = Math.max(now - this._lastT, 1);
 
-    /* ゴム引き */
-    if (rawIdx < 0) {
-      this._offset = this.index * ITEM_H + dy * 0.32;
-    } else if (rawIdx > maxI) {
-      this._offset = (this.index - maxI) * ITEM_H + (dy - (this.index - maxI) * ITEM_H) * 0.32;
+    /* 速度計算 (px/ms) — EMA でスムージング */
+    const rawV = (clientY - this._lastY) / dt;
+    this._velocity = this._velocity * 0.6 + rawV * 0.4;
+
+    this._lastY = clientY;
+    this._lastT = now;
+
+    /* 今回の移動量 */
+    const dy    = clientY - this._startY;
+    const maxI  = this.count - 1;
+
+    /* ゴム引き計算 */
+    const floatIdx = this.index - dy / ITEM_H;
+    let   offset;
+
+    if (floatIdx < 0) {
+      /* 先頭を超えた: 引き戻し係数 0.28 */
+      const over  = -floatIdx * ITEM_H;   // 超えた量(px, 正値)
+      offset = this.index * ITEM_H + over * 0.28;
+    } else if (floatIdx > maxI) {
+      /* 末尾を超えた */
+      const over  = (floatIdx - maxI) * ITEM_H;
+      offset = (this.index - maxI) * ITEM_H - over * 0.28;
     } else {
-      this._offset = dy;
+      offset = dy;
     }
-    this._applyTransform(false);
+
+    this._rawOffset = offset;
+
+    /* rAF 経由で描画 */
+    this._scheduleRaf(this._calcY(this.index, offset));
   }
 
   _onEnd() {
     if (!this._dragging) return;
-    this._dragging = false;
-    this._snap(true);
+    this._dragging  = false;
+    this._cancelRaf();
+
+    /* 慣性 or スナップ */
+    const FLING_THRESH = 0.18;  // px/ms
+    let   newIndex;
+
+    if (Math.abs(this._velocity) > FLING_THRESH) {
+      /* 慣性: velocity * 係数 でオフセットを加算 */
+      const fling     = this._velocity * 90;
+      const floatIdx  = this.index - (this._rawOffset + fling) / ITEM_H;
+      newIndex = this._clamp(floatIdx);
+    } else {
+      /* 通常スナップ: rawOffset から整数インデックスへ */
+      const floatIdx  = this.index - this._rawOffset / ITEM_H;
+      newIndex = this._clamp(floatIdx);
+    }
+
+    this._rawOffset = 0;
+    this.index      = newIndex;
+
+    /* CSS トランジションでスムーズにスナップ */
+    this._setTransition(true);
+    this.innerEl.style.transform = `translateY(${this._calcY(this.index, 0)}px)`;
+    this._onChangeCb && this._onChangeCb(this.index);
   }
 
+  _onCancel() {
+    if (!this._dragging) return;
+    this._dragging  = false;
+    this._cancelRaf();
+    this._rawOffset = 0;
+    /* キャンセル: 現在 index 位置にアニメで戻す */
+    this._setTransition(true);
+    this.innerEl.style.transform = `translateY(${this._calcY(this.index, 0)}px)`;
+  }
+
+  /* ── イベントバインド ── */
   _bindEvents() {
     const el = this.colEl;
 
-    /* Touch（iOS Safari メイン） */
+    /* ─ Touch（iOS Safari メイン）─
+       passive: false で preventDefault を確実に呼ぶ。
+       これによりページ/シートのスクロール競合を防止。 */
     el.addEventListener('touchstart', e => {
-      e.preventDefault();
+      e.preventDefault();   // ← スクロール競合防止・必須
+      e.stopPropagation();
+      if (e.touches.length !== 1) return;
       this._onStart(e.touches[0].clientY);
     }, { passive: false });
 
     el.addEventListener('touchmove', e => {
-      e.preventDefault();
+      e.preventDefault();   // ← スクロール競合防止・必須
+      e.stopPropagation();
+      if (e.touches.length !== 1) return;
       this._onMove(e.touches[0].clientY);
     }, { passive: false });
 
     el.addEventListener('touchend', e => {
-      e.preventDefault();
+      e.preventDefault();   // ← 意図しないクリック発火防止
+      e.stopPropagation();
       this._onEnd();
     }, { passive: false });
 
-    el.addEventListener('touchcancel', () => {
-      this._dragging = false;
-      this.setIndex(this.index, true);
+    el.addEventListener('touchcancel', e => {
+      e.stopPropagation();
+      this._onCancel();
     }, { passive: true });
 
-    /* Pointer（デスクトップ確認用） */
+    /* ─ Pointer（デスクトップ・テスト用）─ */
     el.addEventListener('pointerdown', e => {
       if (e.pointerType === 'touch') return;
       e.preventDefault();
       el.setPointerCapture(e.pointerId);
       this._onStart(e.clientY);
-    });
+    }, { passive: false });
+
     el.addEventListener('pointermove', e => {
       if (e.pointerType === 'touch') return;
+      if (!this._dragging) return;
       this._onMove(e.clientY);
-    });
+    }, { passive: true });
+
     el.addEventListener('pointerup', e => {
       if (e.pointerType === 'touch') return;
       this._onEnd();
-    });
+    }, { passive: true });
+
     el.addEventListener('pointercancel', e => {
       if (e.pointerType === 'touch') return;
-      this._dragging = false;
-      this.setIndex(this.index, true);
-    });
+      this._onCancel();
+    }, { passive: true });
   }
 }
 
@@ -266,22 +390,27 @@ function showSheet(overlay, sheet) {
 function hideSheet(overlay, sheet) {
   overlay.classList.remove('open');
   sheet.classList.remove('open');
-  sheet.style.transform = '';  /* transition終了後リセット */
+  sheet.style.transform = '';
 }
 
-/* シートをドラッグで閉じる */
+/* シートをハンドルドラッグで閉じる */
 function bindSheetDrag(handleEl, sheetEl, onClose) {
   let startY = 0, dragging = false;
+
   handleEl.addEventListener('touchstart', e => {
     dragging = true;
-    startY = e.touches[0].clientY;
+    startY   = e.touches[0].clientY;
     sheetEl.style.transition = 'none';
   }, { passive: true });
+
+  /* ※ ここは document に attach するが、ドラム列 (.pk-col) の
+        touchmove は e.stopPropagation() 済みなので競合しない */
   document.addEventListener('touchmove', e => {
     if (!dragging) return;
     const dy = Math.max(0, e.touches[0].clientY - startY);
     sheetEl.style.transform = `translateY(${dy}px)`;
   }, { passive: true });
+
   document.addEventListener('touchend', e => {
     if (!dragging) return;
     dragging = false;
@@ -295,44 +424,41 @@ function bindSheetDrag(handleEl, sheetEl, onClose) {
 }
 
 /* =====================================================
-   枚数ピッカー（各金種）
+   枚数ピッカー（各金種共用 — 1列）
    ===================================================== */
 const COUNT_MAX = 99;
 
-let countPickerDenom  = null;   // 現在開いている金種
-let countPickerDrum   = null;   // DrumCol インスタンス
-let countPickerCancelValue = 0; // キャンセル用退避
+let countPickerDenom      = null;
+let countPickerDrum       = null;
+let countPickerCancelValue = 0;
 
 function buildCountPicker() {
-  const sheet   = document.getElementById('countSheet');
-  const inner   = document.getElementById('countInner');
+  const inner = document.getElementById('countInner');
 
   /* アイテム生成 0〜99 */
   inner.innerHTML = '';
   for (let i = 0; i <= COUNT_MAX; i++) {
     const item = document.createElement('div');
-    item.className = 'pk-item';
+    item.className   = 'pk-item';
     item.textContent = String(i);
     inner.appendChild(item);
   }
 
-  const colEl = document.getElementById('countCol');
-  countPickerDrum = new DrumCol(colEl, inner, COUNT_MAX + 1);
+  const colEl        = document.getElementById('countCol');
+  countPickerDrum    = new DrumCol(colEl, inner, COUNT_MAX + 1);
 
   countPickerDrum.onChange(idx => {
     const preview = document.getElementById('countPreview');
     if (countPickerDenom) {
-      const sub = idx > 0
+      preview.textContent = idx > 0
         ? `${countPickerDenom.value.toLocaleString('ja-JP')} × ${idx} = ¥${(countPickerDenom.value * idx).toLocaleString('ja-JP')}`
         : '0枚';
-      preview.textContent = sub;
     }
   });
 
-  /* ドラッグで閉じる */
   bindSheetDrag(
     document.getElementById('countHandle'),
-    sheet,
+    document.getElementById('countSheet'),
     () => closeCountPicker(false)
   );
 }
@@ -341,13 +467,9 @@ function openCountPicker(denom) {
   countPickerDenom       = denom;
   countPickerCancelValue = counts[denom.value];
 
-  /* タイトル更新 */
   document.getElementById('countTitle').textContent = denom.label + ' の枚数';
-
-  /* 現在の枚数にセット */
   countPickerDrum.setIndex(counts[denom.value], false);
 
-  /* プレビュー初期化 */
   const c = counts[denom.value];
   document.getElementById('countPreview').textContent = c > 0
     ? `${denom.value.toLocaleString('ja-JP')} × ${c} = ¥${(denom.value * c).toLocaleString('ja-JP')}`
@@ -411,8 +533,8 @@ function buildLedgerPicker() {
   body.innerHTML = '';
 
   /* 選択ハイライト */
-  const hl = document.createElement('div');
-  hl.className = 'pk-selection';
+  const hl       = document.createElement('div');
+  hl.className   = 'pk-selection';
   body.appendChild(hl);
 
   ledgerDrums = [];
@@ -422,20 +544,20 @@ function buildLedgerPicker() {
     wrap.className = 'pk-col-wrap';
 
     const lbl   = document.createElement('div');
-    lbl.className = 'pk-col-label';
+    lbl.className   = 'pk-col-label';
     lbl.textContent = col.label;
 
     const colEl = document.createElement('div');
     colEl.className = 'pk-col';
-    colEl.id = `ledger-col-${ci}`;
+    colEl.id        = `ledger-col-${ci}`;
 
     const inner = document.createElement('div');
     inner.className = 'pk-col-inner';
-    inner.id = `ledger-inner-${ci}`;
+    inner.id        = `ledger-inner-${ci}`;
 
     for (let i = 0; i < col.count; i++) {
-      const item = document.createElement('div');
-      item.className = 'pk-item';
+      const item       = document.createElement('div');
+      item.className   = 'pk-item';
       item.textContent = String(i);
       inner.appendChild(item);
     }
@@ -485,7 +607,7 @@ function closeLedgerPicker(apply) {
 function showConfirm(title, msg, onOk) {
   document.getElementById('modalTitle').textContent = title;
   document.getElementById('modalMsg').textContent   = msg;
-  const overlay = document.getElementById('confirmOverlay');
+  const overlay   = document.getElementById('confirmOverlay');
   overlay.classList.add('open');
 
   const btnOk     = document.getElementById('modalOk');
@@ -526,29 +648,23 @@ function init() {
   buildCountPicker();
   buildLedgerPicker();
 
-  /* 保存値を反映 */
   ALL.forEach(d => refreshRow(d.value, false));
   recalc();
 
-  /* 帳簿トリガー */
   document.getElementById('ledgerTrigger').addEventListener('click', openLedgerPicker);
 
-  /* 帳簿ピッカーボタン */
-  document.getElementById('ledgerCancel').addEventListener('click', () => closeLedgerPicker(false));
-  document.getElementById('ledgerDone').addEventListener('click',   () => closeLedgerPicker(true));
+  document.getElementById('ledgerCancel').addEventListener('click',  () => closeLedgerPicker(false));
+  document.getElementById('ledgerDone').addEventListener('click',    () => closeLedgerPicker(true));
   document.getElementById('ledgerOverlay').addEventListener('click', () => closeLedgerPicker(false));
 
-  /* 枚数ピッカーボタン */
-  document.getElementById('countCancel').addEventListener('click', () => closeCountPicker(false));
-  document.getElementById('countDone').addEventListener('click',   () => closeCountPicker(true));
+  document.getElementById('countCancel').addEventListener('click',  () => closeCountPicker(false));
+  document.getElementById('countDone').addEventListener('click',    () => closeCountPicker(true));
   document.getElementById('countOverlay').addEventListener('click', () => closeCountPicker(false));
 
-  /* リセット */
   document.getElementById('resetBtn').addEventListener('click', () => {
     showConfirm('リセットの確認', 'すべての枚数と帳簿残額をリセットします。', doReset);
   });
 
-  /* テキスト選択禁止 */
   document.addEventListener('selectstart', e => {
     if (!e.target.closest('input')) e.preventDefault();
   });
