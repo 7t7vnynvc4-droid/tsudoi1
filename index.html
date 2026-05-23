@@ -1,148 +1,158 @@
-:root {
-    --primary-color: #007aff;
-    --bg-color: #f2f2f7;
-    --card-bg: #ffffff;
-    --text-color: #1c1c1e;
-    --border-color: #e5e5ea;
-    --error-color: #ff3b30;
-    --success-color: #34c759;
-}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="お金カウンター">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1c1c1e"  media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <title>お金カウンター</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
 
-body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background-color: var(--bg-color);
-    color: var(--text-color);
-    margin: 0;
-    padding: 16px;
-    display: flex;
-    justify-content: center;
-}
+<!-- ▼ ヘッダー -->
+<header class="header">
+  <h1>💴 お金カウンター</h1>
+</header>
 
-.app-container {
-    width: 100%;
-    max-width: 500px;
-    background: var(--card-bg);
-    border-radius: 12px;
-    padding: 20px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    box-sizing: border-box;
-}
+<!-- ▼ メイン -->
+<div class="main">
 
-h1 {
-    font-size: 20px;
-    text-align: center;
-    margin-top: 0;
-    margin-bottom: 20px;
-}
+  <!-- 帳簿残高（ピッカートリガー） -->
+  <div class="ledger-area">
+    <div class="ledger-label">帳簿上の残額（タップして入力）</div>
+    <div class="ledger-trigger" id="ledgerTrigger" role="button" aria-label="帳簿残額を入力">
+      <span class="ledger-yen">¥</span>
+      <span class="ledger-value" id="ledgerValue">0</span>
+      <span class="ledger-chevron">›</span>
+    </div>
+  </div>
 
-.balance-section {
-    background: var(--bg-color);
-    padding: 12px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-}
+  <!-- 2列：紙幣 ／ 硬貨 -->
+  <div class="columns">
+    <div class="column-card">
+      <div class="column-header">紙 幣</div>
+      <div id="billRows"></div>
+    </div>
+    <div class="column-card">
+      <div class="column-header">硬 貨</div>
+      <div id="coinRows"></div>
+    </div>
+  </div>
 
-.balance-section label {
-    display: block;
-    font-size: 14px;
-    margin-bottom: 6px;
-    font-weight: bold;
-}
+  <!-- サマリー -->
+  <div class="summary">
+    <div class="summary-row">
+      <span class="summary-label">カウント合計</span>
+      <span class="summary-value" id="totalDisplay">¥0</span>
+    </div>
+    <div class="summary-row">
+      <span class="summary-label">帳簿上の残額</span>
+      <span class="summary-value" id="ledgerDisplay">¥0</span>
+    </div>
+    <div class="summary-row diff-row">
+      <div>
+        <div class="diff-label">差 異</div>
+        <div class="diff-value zero" id="diffDisplay">±0円</div>
+      </div>
+    </div>
+  </div>
 
-#book-balance {
-    width: 100%;
-    padding: 12px;
-    font-size: 24px;
-    text-align: right;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    box-sizing: border-box;
-    background: white;
-    font-weight: bold;
-}
+</div><!-- /.main -->
 
-/* テンキーのレイアウト設定 */
-.keypad {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    margin-top: 12px;
-}
+<!-- ▼ リセット -->
+<div class="reset-area">
+  <button class="reset-btn" id="resetBtn">すべてリセット</button>
+</div>
 
-.keypad button {
-    background: white;
-    border: 1px solid var(--border-color);
-    padding: 14px;
-    font-size: 18px;
-    font-weight: bold;
-    border-radius: 6px;
-    cursor: pointer;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
 
-.keypad button:active {
-    background: #e5e5ea;
-}
+<!-- ============================================================
+     枚数ドラムロールピッカー（各金種共用）
+     ============================================================ -->
+<div class="picker-overlay" id="countOverlay"></div>
+<div class="picker-sheet"   id="countSheet" role="dialog">
 
-.keypad .btn-clear {
-    background: var(--error-color);
-    color: white;
-    border: none;
-}
+  <div class="pk-handle" id="countHandle"></div>
 
-.keypad .btn-clear:active {
-    background: #cc2e25;
-}
+  <div class="pk-toolbar">
+    <button class="pk-cancel" id="countCancel">キャンセル</button>
+    <span   class="pk-title"  id="countTitle">枚数を選択</span>
+    <button class="pk-done"   id="countDone">決 定</button>
+  </div>
 
-.denom-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border-color);
-}
+  <!-- ドラムロール（1列） -->
+  <div class="pk-drum-wrap">
+    <div class="pk-selection"></div>
+    <div class="pk-col-wrap">
+      <div class="pk-col-label">枚</div>
+      <div class="pk-col" id="countCol">
+        <div class="pk-col-inner" id="countInner"></div>
+      </div>
+    </div>
+  </div>
 
-.denom-label {
-    font-size: 16px;
-    font-weight: 500;
-    width: 100px;
-}
+  <div class="pk-preview" id="countPreview">0枚</div>
 
-.denom-picker {
-    font-size: 18px;
-    padding: 8px 12px;
-    border-radius: 6px;
-    border: 1px solid var(--border-color);
-    background-color: var(--bg-color);
-    width: 90px;
-    text-align: center;
-}
+</div>
 
-.denom-subtotal {
-    font-size: 16px;
-    width: 100px;
-    text-align: right;
-}
 
-.result-section {
-    margin-top: 20px;
-    background: var(--bg-color);
-    padding: 16px;
-    border-radius: 8px;
-}
+<!-- ============================================================
+     帳簿残高ドラムロールピッカー（5列）
+     ============================================================ -->
+<div class="picker-overlay" id="ledgerOverlay"></div>
+<div class="picker-sheet"   id="ledgerSheet" role="dialog">
 
-.result-row {
-    display: flex;
-    justify-content: space-between;
-    font-size: 18px;
-    font-weight: bold;
-    margin-bottom: 8px;
-}
+  <div class="pk-handle" id="ledgerHandle"></div>
 
-.result-row:last-child {
-    margin-bottom: 0;
-}
+  <div class="pk-toolbar">
+    <button class="pk-cancel" id="ledgerCancel">キャンセル</button>
+    <span   class="pk-title">帳簿残額を入力</span>
+    <button class="pk-done"  id="ledgerDone">決 定</button>
+  </div>
 
-.error { color: var(--error-color); }
-.success { color: var(--success-color); }
-.zero { color: var(--text-color); }
+  <!-- ドラムロール（5列・JS生成） -->
+  <div class="pk-drum-wrap" id="ledgerBody">
+    <!-- 列は buildLedgerPicker() で動的生成 -->
+  </div>
+
+  <div class="pk-preview" id="ledgerPreview">¥ 0</div>
+
+</div>
+
+
+<!-- ============================================================
+     iOS風確認モーダル
+     ============================================================ -->
+<div class="modal-overlay" id="confirmOverlay" role="dialog" aria-modal="true">
+  <div class="modal-box">
+    <div class="modal-body">
+      <div class="modal-title" id="modalTitle">リセットの確認</div>
+      <div class="modal-msg"   id="modalMsg">すべての枚数と帳簿残額をリセットします。</div>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn-cancel" id="modalCancel">キャンセル</button>
+      <button class="modal-btn-ok"     id="modalOk">リセット</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ▼ スクリプト -->
+<script src="app.js"></script>
+
+<!-- ▼ PWA Service Worker -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    });
+  }
+</script>
+
+</body>
+</html>
