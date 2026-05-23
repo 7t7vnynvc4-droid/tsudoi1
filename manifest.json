@@ -1,26 +1,15 @@
 {
+  "name": "お金カウンター",
   "short_name": "お金カウンター",
-  "name": "お金カウンター - ドラムロール入力",
-  "icons": [
-    {
-      "src": "https://jsdelivr.net",
-      "type": "image/png",
-      "sizes": "72x72"
-    },
-    {
-      "src": "https://jsdelivr.net",
-      "type": "image/png",
-      "sizes": "192x192"
-    },
-    {
-      "src": "https://jsdelivr.net",
-      "type": "image/png",
-      "sizes": "512x512"
-    }
-  ],
-  "start_url": "/",
+  "description": "現金の枚数をかぞえて帳簿と照合するアプリ",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#f2f2f7",
   "theme_color": "#007aff",
-  "display": "standalone",
-  "orientation": "portrait"
+  "lang": "ja",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
 }
