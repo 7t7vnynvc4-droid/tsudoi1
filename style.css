@@ -285,44 +285,65 @@ body {
 .pk-cancel { color: var(--sublabel); text-align: left; }
 .pk-done   { color: var(--accent); font-weight: 700; text-align: right; }
 
-/* ドラムロール本体 */
+/* ドラムロール本体
+   高さ 200px = DRUM_H (JS定数と一致させること)
+   選択中心 = 100px (上端から)
+*/
 .pk-drum-wrap {
   position: relative;
-  height: 220px; overflow: hidden;
+  height: 200px; overflow: hidden;
   display: flex; align-items: stretch;
 }
 
-/* 選択ハイライト帯 */
+/* 選択ハイライト帯
+   top:50% + translateY(-50%) で中心ライン (100px) に配置
+   height = ITEM_H = 40px
+*/
 .pk-selection {
   position: absolute; left: 0; right: 0;
   top: 50%; transform: translateY(-50%);
-  height: 44px; pointer-events: none; z-index: 2;
+  height: 40px; pointer-events: none; z-index: 2;
   background: var(--pk-sel-bg);
   border-top: 1px solid var(--pk-sel-border);
   border-bottom: 1px solid var(--pk-sel-border);
+  border-radius: 6px;
 }
 
 /* 上下フェード */
 .pk-drum-wrap::before,
 .pk-drum-wrap::after {
   content: ''; position: absolute; left: 0; right: 0;
-  height: 90px; pointer-events: none; z-index: 3;
+  height: 80px; pointer-events: none; z-index: 3;
 }
 .pk-drum-wrap::before { top: 0;    background: var(--pk-fade-top); }
 .pk-drum-wrap::after  { bottom: 0; background: var(--pk-fade-btm); }
 
-/* 列コンテナ */
+/* 列コンテナ
+   touch-action: none     → ブラウザのスクロール介入を遮断
+   overscroll-behavior    → 親要素へのスクロール伝播を防止
+*/
 .pk-col {
-  flex: 1; overflow: hidden; touch-action: none; cursor: grab;
+  flex: 1; overflow: hidden;
+  touch-action: none;          /* ← スクロール競合防止 */
+  overscroll-behavior: contain; /* ← スクロール暴発防止 */
+  cursor: grab;
   position: relative; z-index: 1;
+  -webkit-user-select: none; user-select: none;
 }
 .pk-col:active { cursor: grabbing; }
-.pk-col-inner { will-change: transform; }
+
+.pk-col-inner {
+  will-change: transform;
+  /* GPU合成レイヤーに昇格させてジャンクを防ぐ */
+  transform: translateZ(0);
+}
+
+/* アイテム高さ = ITEM_H = 40px */
 .pk-item {
-  height: 44px;
+  height: 40px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 28px; font-weight: 600; color: var(--pk-item);
-  letter-spacing: -0.5px;
+  font-size: 24px; font-weight: 600; color: var(--pk-item);
+  letter-spacing: -0.4px;
 }
 
 /* 列ラベル */
@@ -345,7 +366,7 @@ body {
 /* =====================================================
    帳簿ピッカー専用（5列）
    ===================================================== */
-#ledgerSheet .pk-item { font-size: 24px; }
+#ledgerSheet .pk-item { font-size: 20px; }
 
 /* =====================================================
    iOS風確認モーダル
@@ -395,16 +416,4 @@ body {
 }
 .denom-count.bump {
   animation: countBump .18s ease-out;
-}
-/* ▼ ドラムロール改善 */
-.pk-col {
-  overflow-y: scroll !important;
-  -webkit-overflow-scrolling: touch !important;
-  overscroll-behavior: contain;
-  touch-action: pan-y !important;
-}
-
-.pk-col-inner {
-  will-change: auto !important;
-  transform: translateZ(0);
 }
