@@ -23,13 +23,21 @@
 <!-- ▼ メイン -->
 <div class="main">
 
-  <!-- 帳簿残高（ピッカートリガー） -->
+  <!-- 帳簿残高（直接入力） -->
   <div class="ledger-area">
-    <div class="ledger-label">帳簿上の残額（タップして入力）</div>
-    <div class="ledger-trigger" id="ledgerTrigger" role="button" aria-label="帳簿残額を入力">
+    <div class="ledger-label">帳簿上の残額</div>
+    <div class="ledger-input-wrap">
       <span class="ledger-yen">¥</span>
-      <span class="ledger-value" id="ledgerValue">0</span>
-      <span class="ledger-chevron">›</span>
+      <input
+        id="ledgerInput"
+        class="ledger-input"
+        type="number"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        placeholder="0"
+        min="0"
+        autocomplete="off"
+      >
     </div>
   </div>
 
@@ -85,42 +93,21 @@
     <button class="pk-done"   id="countDone">決 定</button>
   </div>
 
-  <!-- ドラムロール（1列） -->
-  <div class="pk-drum-wrap">
+  <!-- ラベル行：.pk-drum-wrap の外に置くことで
+       .pk-col の高さ = DRUM_H に正確に一致させる -->
+  <div class="pk-label-row">
+    <div class="pk-col-label">枚</div>
+  </div>
+
+  <!-- ドラムロール本体（高さ = DRUM_H = 200px） -->
+  <div class="pk-drum-wrap" id="countDrumWrap">
     <div class="pk-selection"></div>
-    <div class="pk-col-wrap">
-      <div class="pk-col-label">枚</div>
-      <div class="pk-col" id="countCol">
-        <div class="pk-col-inner" id="countInner"></div>
-      </div>
+    <div class="pk-col" id="countCol">
+      <div class="pk-col-inner" id="countInner"></div>
     </div>
   </div>
 
   <div class="pk-preview" id="countPreview">0枚</div>
-
-</div>
-
-
-<!-- ============================================================
-     帳簿残高ドラムロールピッカー（5列）
-     ============================================================ -->
-<div class="picker-overlay" id="ledgerOverlay"></div>
-<div class="picker-sheet"   id="ledgerSheet" role="dialog">
-
-  <div class="pk-handle" id="ledgerHandle"></div>
-
-  <div class="pk-toolbar">
-    <button class="pk-cancel" id="ledgerCancel">キャンセル</button>
-    <span   class="pk-title">帳簿残額を入力</span>
-    <button class="pk-done"  id="ledgerDone">決 定</button>
-  </div>
-
-  <!-- ドラムロール（5列・JS生成） -->
-  <div class="pk-drum-wrap" id="ledgerBody">
-    <!-- 列は buildLedgerPicker() で動的生成 -->
-  </div>
-
-  <div class="pk-preview" id="ledgerPreview">¥ 0</div>
 
 </div>
 
